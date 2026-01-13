@@ -98,7 +98,7 @@ internal sealed class TableMeasurer : TableAccessor
 
         // Include columns (both header and footer) in measurement
         var headerMeasure = column.Header.Measure(Options, maxWidth);
-        var footerMeasure = column.Footer?.Measure(Options, maxWidth) ?? headerMeasure;
+        var footerMeasure = (column.Footer ?? (column.NoWrap ? null : column.Header))!.Measure(Options, maxWidth);
         minWidths.Add(Math.Min(headerMeasure.Min, footerMeasure.Min));
         maxWidths.Add(Math.Max(headerMeasure.Max, footerMeasure.Max));
 
