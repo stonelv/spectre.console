@@ -1,0 +1,11 @@
+Hello Spectre.Console!
+This is a test file.
+It contains some lines of text.
+
+Line 5 has been modified.
+Line 6.
+Line 7.
+New line 8.
+Line 9.
+Line 10.
+Line 11 added.
