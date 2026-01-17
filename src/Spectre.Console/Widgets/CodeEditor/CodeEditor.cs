@@ -96,7 +96,7 @@ public sealed class CodeEditor : IRenderable
         }).ConfigureAwait(false);
     }
 
-    private string? HandleKey(ConsoleKeyInfo key)
+    public string? HandleKey(ConsoleKeyInfo key)
     {
         _redoStack.Clear();
 
