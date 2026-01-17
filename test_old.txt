@@ -1,0 +1,7 @@
+Hello World
+This is a test file
+It has multiple lines
+Some lines will be removed
+And some will stay
+Line 6
+The end
