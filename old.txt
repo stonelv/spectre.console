@@ -1,0 +1,7 @@
+Hello World
+This is the original text
+Line 3
+Line 4
+Line 5
+Some important content
+End of file
