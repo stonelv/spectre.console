@@ -48,7 +48,6 @@ internal sealed class MarkupTokenizer : IDisposable
                 if (encounteredClosing)
                 {
                     _reader.Read();
-                    encounteredClosing = false;
                     continue;
                 }
 
