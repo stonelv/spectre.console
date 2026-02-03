@@ -89,17 +89,30 @@ public sealed class Diff : Renderable
     protected override Measurement Measure(RenderOptions options, int maxWidth)
     {
         var result = GetResult();
-        var maxLineLength = result.Lines.Max(l => l.Text.Length);
+
+        // Handle empty result
+        if (result.Lines.Count == 0)
+        {
+            return new Measurement(0, 0);
+        }
+
+        var maxLineLength = 0;
+        foreach (var line in result.Lines)
+        {
+            if (line.Text != null && line.Text.Length > maxLineLength)
+            {
+                maxLineLength = line.Text.Length;
+            }
+        }
 
         // Account for prefixes and line numbers
         var prefixWidth = 2; // "+ " or "- " or "  "
-        var lineNumberWidth = ShowLineNumbers ? 8 : 0; // "123: "
+        var lineNumberWidth = ShowLineNumbers ? 10 : 0; // "  - 1 + 2 "
 
         var totalWidth = maxLineLength + prefixWidth + lineNumberWidth;
+        var minWidth = Math.Min(totalWidth, maxWidth);
 
-        return new Measurement(
-            Math.Min(totalWidth, maxWidth),
-            Math.Min(totalWidth, maxWidth));
+        return new Measurement(minWidth, minWidth);
     }
 
     /// <inheritdoc/>
@@ -107,52 +120,75 @@ public sealed class Diff : Renderable
     {
         var result = GetResult();
 
+        // Handle empty result
+        if (result.Lines.Count == 0)
+        {
+            return Array.Empty<Segment>();
+        }
+
+        // Ensure minimum width for rendering
+        var minRenderWidth = 10;
+        var effectiveMaxWidth = Math.Max(maxWidth, minRenderWidth);
+
         return Mode switch
         {
-            DiffMode.Inline => RenderInline(result, options, maxWidth),
-            DiffMode.SideBySide => RenderSideBySide(result, options, maxWidth),
-            _ => RenderInline(result, options, maxWidth),
+            DiffMode.Inline => RenderInline(result, options, effectiveMaxWidth),
+            DiffMode.SideBySide => RenderSideBySide(result, options, effectiveMaxWidth),
+            _ => RenderInline(result, options, effectiveMaxWidth),
         };
     }
 
     private IEnumerable<Segment> RenderInline(DiffResult result, RenderOptions options, int maxWidth)
     {
         var segments = new List<Segment>();
-        var maxLineNumber = Math.Max(
-            result.Lines.Max(l => l.OldLineNumber ?? 0),
-            result.Lines.Max(l => l.NewLineNumber ?? 0));
-        var lineNumberWidth = ShowLineNumbers ? maxLineNumber.ToString().Length + 1 : 0;
+
+        // Calculate line number column widths
+        var maxOldLineNumber = 0;
+        var maxNewLineNumber = 0;
+        foreach (var line in result.Lines)
+        {
+            if (line.OldLineNumber.HasValue && line.OldLineNumber.Value > maxOldLineNumber)
+            {
+                maxOldLineNumber = line.OldLineNumber.Value;
+            }
+            if (line.NewLineNumber.HasValue && line.NewLineNumber.Value > maxNewLineNumber)
+            {
+                maxNewLineNumber = line.NewLineNumber.Value;
+            }
+        }
+
+        var oldLineNumWidth = maxOldLineNumber.ToString().Length;
+        var newLineNumWidth = maxNewLineNumber.ToString().Length;
+        var lineNumWidth = Math.Max(oldLineNumWidth, newLineNumWidth);
 
         foreach (var line in result.Lines)
         {
-            // Skip unchanged lines if they are empty and surrounded by changes
-            // (optional optimization, currently showing all lines)
-
             // Add line number if enabled
             if (ShowLineNumbers)
             {
-                var oldNum = line.OldLineNumber?.ToString() ?? "";
-                var newNum = line.NewLineNumber?.ToString() ?? "";
-                var lineNumStr = $"{oldNum.PadLeft(lineNumberWidth / 2)}{newNum.PadLeft(lineNumberWidth / 2 + 1)} ";
+                var oldNumStr = line.OldLineNumber?.ToString() ?? string.Empty;
+                var newNumStr = line.NewLineNumber?.ToString() ?? string.Empty;
+                var lineNumStr = $"{oldNumStr.PadLeft(lineNumWidth)} {newNumStr.PadLeft(lineNumWidth)} ";
                 segments.Add(new Segment(lineNumStr, LineNumberStyle));
             }
 
             // Add prefix and line content based on type
+            var lineText = line.Text ?? string.Empty;
             switch (line.Type)
             {
                 case DiffLineType.Inserted:
                     segments.Add(new Segment(InsertedPrefix, InsertedStyle));
-                    segments.Add(new Segment(line.Text, InsertedStyle));
+                    segments.Add(new Segment(lineText, InsertedStyle));
                     break;
 
                 case DiffLineType.Deleted:
                     segments.Add(new Segment(DeletedPrefix, DeletedStyle));
-                    segments.Add(new Segment(line.Text, DeletedStyle));
+                    segments.Add(new Segment(lineText, DeletedStyle));
                     break;
 
                 case DiffLineType.Unchanged:
                     segments.Add(new Segment(UnchangedPrefix, UnchangedStyle));
-                    segments.Add(new Segment(line.Text, UnchangedStyle));
+                    segments.Add(new Segment(lineText, UnchangedStyle));
                     break;
             }
 
@@ -167,65 +203,81 @@ public sealed class Diff : Renderable
         var segments = new List<Segment>();
         var gutterWidth = 3; // " | "
         var prefixWidth = 2; // "+ " or "- "
+        var minContentWidth = 5; // Minimum content width to render anything meaningful
 
-        // Calculate column widths
+        // Calculate column widths with safety checks
         var availableWidth = maxWidth - gutterWidth;
+        if (availableWidth < minContentWidth * 2)
+        {
+            // Not enough space, fall back to inline mode
+            return RenderInline(result, options, maxWidth);
+        }
+
         var leftWidth = LeftColumnWidth ?? availableWidth / 2;
         var rightWidth = RightColumnWidth ?? availableWidth / 2;
 
-        // Ensure we don't exceed max width
+        // Ensure we don't exceed max width and each column has minimum width
         if (leftWidth + rightWidth + gutterWidth > maxWidth)
         {
-            leftWidth = (maxWidth - gutterWidth) / 2;
-            rightWidth = (maxWidth - gutterWidth) / 2;
+            var halfWidth = (maxWidth - gutterWidth) / 2;
+            leftWidth = halfWidth;
+            rightWidth = halfWidth;
         }
 
-        // Build side-by-side view
-        var oldLineData = new List<(string Text, Style Style)>();
-        var newLineData = new List<(string Text, Style Style)>();
+        // Ensure minimum column width
+        leftWidth = Math.Max(leftWidth, minContentWidth);
+        rightWidth = Math.Max(rightWidth, minContentWidth);
+
+        // Re-adjust if needed
+        if (leftWidth + rightWidth + gutterWidth > maxWidth)
+        {
+            var halfWidth = (maxWidth - gutterWidth) / 2;
+            leftWidth = halfWidth;
+            rightWidth = halfWidth;
+        }
+
+        // Build side-by-side view data structure with explicit type information
+        var lineData = new List<(string OldText, string NewText, DiffLineType Type)>();
 
         foreach (var line in result.Lines)
         {
             switch (line.Type)
             {
                 case DiffLineType.Inserted:
-                    oldLineData.Add(("", Style.Plain));
-                    newLineData.Add((line.Text, InsertedStyle));
+                    lineData.Add((string.Empty, line.Text ?? string.Empty, DiffLineType.Inserted));
                     break;
 
                 case DiffLineType.Deleted:
-                    oldLineData.Add((line.Text, DeletedStyle));
-                    newLineData.Add(("", Style.Plain));
+                    lineData.Add((line.Text ?? string.Empty, string.Empty, DiffLineType.Deleted));
                     break;
 
                 case DiffLineType.Unchanged:
-                    oldLineData.Add((line.Text, UnchangedStyle));
-                    newLineData.Add((line.Text, UnchangedStyle));
+                    lineData.Add((line.Text ?? string.Empty, line.Text ?? string.Empty, DiffLineType.Unchanged));
                     break;
             }
         }
 
         // Render rows
-        var maxRows = Math.Max(oldLineData.Count, newLineData.Count);
-        for (var i = 0; i < maxRows; i++)
+        foreach (var row in lineData)
         {
-            var oldLine = i < oldLineData.Count ? oldLineData[i] : (Text: "", Style: Style.Plain);
-            var newLine = i < newLineData.Count ? newLineData[i] : (Text: "", Style: Style.Plain);
-
             // Left column (old)
-            var leftText = Truncate(oldLine.Text, leftWidth - prefixWidth);
-            var leftPrefix = GetPrefixForStyle(oldLine.Style);
-            segments.Add(new Segment(leftPrefix, oldLine.Style));
-            segments.Add(new Segment(leftText.PadRight(leftWidth - prefixWidth), oldLine.Style));
+            var leftStyle = GetStyleForLineType(row.Type == DiffLineType.Inserted ? DiffLineType.Unchanged : row.Type);
+            var leftPrefix = row.Type == DiffLineType.Inserted ? UnchangedPrefix :
+                             row.Type == DiffLineType.Deleted ? DeletedPrefix : UnchangedPrefix;
+            var leftText = Truncate(row.OldText, leftWidth - prefixWidth);
+            segments.Add(new Segment(leftPrefix, leftStyle));
+            segments.Add(new Segment(leftText.PadRight(leftWidth - prefixWidth), leftStyle));
 
             // Gutter
             segments.Add(new Segment(" | ", LineNumberStyle));
 
             // Right column (new)
-            var rightText = Truncate(newLine.Text, rightWidth - prefixWidth);
-            var rightPrefix = GetPrefixForStyle(newLine.Style);
-            segments.Add(new Segment(rightPrefix, newLine.Style));
-            segments.Add(new Segment(rightText.PadRight(rightWidth - prefixWidth), newLine.Style));
+            var rightStyle = GetStyleForLineType(row.Type == DiffLineType.Deleted ? DiffLineType.Unchanged : row.Type);
+            var rightPrefix = row.Type == DiffLineType.Inserted ? InsertedPrefix :
+                              row.Type == DiffLineType.Deleted ? UnchangedPrefix : UnchangedPrefix;
+            var rightText = Truncate(row.NewText, rightWidth - prefixWidth);
+            segments.Add(new Segment(rightPrefix, rightStyle));
+            segments.Add(new Segment(rightText.PadRight(rightWidth - prefixWidth), rightStyle));
 
             segments.Add(Segment.LineBreak);
         }
@@ -233,28 +285,33 @@ public sealed class Diff : Renderable
         return segments;
     }
 
-    private string GetPrefixForStyle(Style style)
+    private Style GetStyleForLineType(DiffLineType type)
     {
-        if (style.Equals(InsertedStyle))
+        return type switch
         {
-            return InsertedPrefix;
-        }
-
-        if (style.Equals(DeletedStyle))
-        {
-            return DeletedPrefix;
-        }
-
-        return UnchangedPrefix;
+            DiffLineType.Inserted => InsertedStyle,
+            DiffLineType.Deleted => DeletedStyle,
+            _ => UnchangedStyle,
+        };
     }
 
     private static string Truncate(string text, int maxLength)
     {
-        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+        if (string.IsNullOrEmpty(text))
         {
-            return text ?? string.Empty;
+            return string.Empty;
         }
 
-        return text.Substring(0, Math.Max(0, maxLength - 3)) + "...";
+        if (text.Length <= maxLength)
+        {
+            return text;
+        }
+
+        if (maxLength <= 3)
+        {
+            return text.Substring(0, maxLength);
+        }
+
+        return text.Substring(0, maxLength - 3) + "...";
     }
 }

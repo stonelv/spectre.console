@@ -26,8 +26,13 @@ internal static class DiffAlgorithm
             throw new ArgumentNullException(nameof(newText));
         }
 
-        var oldLines = oldText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-        var newLines = newText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        // Handle empty strings - return empty arrays instead of arrays with empty string
+        var oldLines = string.IsNullOrEmpty(oldText)
+            ? Array.Empty<string>()
+            : oldText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        var newLines = string.IsNullOrEmpty(newText)
+            ? Array.Empty<string>()
+            : newText.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
         return Compute(oldLines, newLines);
     }
