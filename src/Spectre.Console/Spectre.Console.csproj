@@ -20,6 +20,7 @@
     <PackageReference Include="Wcwidth.Sources" PrivateAssets="all" />
     <PackageReference Include="System.Memory" Condition="'$(TargetFramework)' == 'netstandard2.0'"/>
     <PackageReference Include="Polyfill" Condition="'$(TargetFramework)' == 'netstandard2.0'" PrivateAssets="all" />
+    <PackageReference Include="TextCopy" />
   </ItemGroup>
 
 </Project>
