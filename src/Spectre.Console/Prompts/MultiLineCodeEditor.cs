@@ -1,0 +1,650 @@
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Spectre.Console;
+
+/// <summary>
+/// Represents a multi-line code editor prompt.
+/// </summary>
+public sealed class MultiLineCodeEditor
+{
+    private readonly string _prompt;
+    private List<string> _lines;
+    private int _cursorLine;
+    private int _cursorColumn;
+    private Stack<List<string>> _undoStack;
+    private const int MaxUndoSteps = 10;
+
+    /// <summary>
+    /// Gets or sets the prompt style.
+    /// </summary>
+    public Style? PromptStyle { get; set; }
+
+    /// <summary>
+    /// Gets or sets the editor style.
+    /// </summary>
+    public Style? EditorStyle { get; set; }
+
+    /// <summary>
+    /// Gets or sets the cursor style.
+    /// </summary>
+    public Style? CursorStyle { get; set; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MultiLineCodeEditor"/> class.
+    /// </summary>
+    /// <param name="prompt">The prompt text.</param>
+    public MultiLineCodeEditor(string prompt)
+    {
+        _prompt = prompt ?? throw new System.ArgumentNullException(nameof(prompt));
+        _lines = new List<string> { string.Empty };
+        _cursorLine = 0;
+        _cursorColumn = 0;
+        _undoStack = new Stack<List<string>>();
+        SaveState();
+    }
+
+    /// <summary>
+    /// Shows the editor and requests input from the user.
+    /// </summary>
+    /// <param name="console">The console to show the editor in.</param>
+    /// <returns>The user input as a string.</returns>
+    public string Show(IAnsiConsole console)
+    {
+        return ShowAsync(console, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Shows the editor and requests input from the user asynchronously.
+    /// </summary>
+    /// <param name="console">The console to show the editor in.</param>
+    /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+    /// <returns>The user input as a string.</returns>
+    public async Task<string> ShowAsync(IAnsiConsole console, CancellationToken cancellationToken)
+    {
+        if (console is null)
+        {
+            throw new System.ArgumentNullException(nameof(console));
+        }
+
+        return await console.RunExclusive(async () =>
+        {
+            var promptStyle = PromptStyle ?? Style.Plain;
+            var editorStyle = EditorStyle ?? Style.Plain;
+            var cursorStyle = CursorStyle ?? Style.Plain;
+
+            WritePrompt(console);
+            RenderEditor(console, editorStyle, cursorStyle);
+
+            while (true)
+            {
+                var key = await console.Input.ReadKeyAsync(true, cancellationToken).ConfigureAwait(false);
+                if (key == null)
+                {
+                    continue;
+                }
+
+                if (key.Value.Key == ConsoleKey.Enter)
+                {
+                    // Handle Enter key
+                    InsertNewline();
+                    SaveState();
+                    RenderEditor(console, editorStyle, cursorStyle);
+                }
+                else if (key.Value.Key == ConsoleKey.Backspace)
+                {
+                    // Handle Backspace key
+                    if (CanDeleteBackward())
+                    {
+                        DeleteBackward();
+                        SaveState();
+                        RenderEditor(console, editorStyle, cursorStyle);
+                    }
+                }
+                else if (key.Value.Key == ConsoleKey.Delete)
+                {
+                    // Handle Delete key
+                    if (CanDeleteForward())
+                    {
+                        DeleteForward();
+                        SaveState();
+                        RenderEditor(console, editorStyle, cursorStyle);
+                    }
+                }
+                else if (key.Value.Key == ConsoleKey.LeftArrow)
+                {
+                    // Handle Left arrow
+                    MoveCursorLeft();
+                    RenderEditor(console, editorStyle, cursorStyle);
+                }
+                else if (key.Value.Key == ConsoleKey.RightArrow)
+                {
+                    // Handle Right arrow
+                    MoveCursorRight();
+                    RenderEditor(console, editorStyle, cursorStyle);
+                }
+                else if (key.Value.Key == ConsoleKey.UpArrow)
+                {
+                    // Handle Up arrow
+                    MoveCursorUp();
+                    RenderEditor(console, editorStyle, cursorStyle);
+                }
+                else if (key.Value.Key == ConsoleKey.DownArrow)
+                {
+                    // Handle Down arrow
+                    MoveCursorDown();
+                    RenderEditor(console, editorStyle, cursorStyle);
+                }
+                else if (key.Value.Modifiers.HasFlag(ConsoleModifiers.Control))
+                {
+                    // Handle Ctrl key combinations
+                    if (key.Value.Key == ConsoleKey.C)
+                    {
+                        // Ctrl+C - Copy
+                        CopyToClipboard();
+                    }
+                    else if (key.Value.Key == ConsoleKey.V)
+                    {
+                        // Ctrl+V - Paste
+                        PasteFromClipboard();
+                        SaveState();
+                        RenderEditor(console, editorStyle, cursorStyle);
+                    }
+                    else if (key.Value.Key == ConsoleKey.Z)
+                    {
+                        // Ctrl+Z - Undo
+                        if (CanUndo())
+                        {
+                            Undo();
+                            RenderEditor(console, editorStyle, cursorStyle);
+                        }
+                    }
+                    else if (key.Value.Key == ConsoleKey.Enter)
+                    {
+                        // Ctrl+Enter - Submit
+                        console.WriteLine();
+                        return string.Join("\n", _lines);
+                    }
+                }
+                else if (key.Value.KeyChar != '\0')
+                {
+                    // Handle regular character input
+                    InsertCharacter(key.Value.KeyChar);
+                    SaveState();
+                    RenderEditor(console, editorStyle, cursorStyle);
+                }
+            }
+        }).ConfigureAwait(false);
+    }
+
+    private void WritePrompt(IAnsiConsole console)
+    {
+        var promptStyle = PromptStyle ?? Style.Plain;
+        console.Markup($"{_prompt}:\n", promptStyle);
+    }
+
+    private void RenderEditor(IAnsiConsole console, Style editorStyle, Style cursorStyle)
+    {
+        // Clear the editor area
+        for (int i = 0; i < _lines.Count; i++)
+        {
+            console.Cursor.Move(CursorDirection.Up, 1);
+            // Clear the line
+            console.Write(new string(' ', console.Profile.Width));
+            console.Cursor.Move(CursorDirection.Left, console.Profile.Width);
+        }
+
+        // Render each line
+        for (int i = 0; i < _lines.Count; i++)
+        {
+            var line = _lines[i];
+            if (i == _cursorLine)
+            {
+                // Render the line up to the cursor
+                if (_cursorColumn > 0)
+                {
+                    console.Write(line.Substring(0, _cursorColumn), editorStyle);
+                }
+                
+                // Render the cursor
+                if (_cursorColumn < line.Length)
+                {
+                    console.Write(line[_cursorColumn].ToString(), cursorStyle);
+                    console.Cursor.Move(CursorDirection.Left, 1);
+                }
+                else
+                {
+                    // Cursor at the end of the line
+                    console.Write(" ", cursorStyle);
+                    console.Cursor.Move(CursorDirection.Left, 1);
+                }
+                
+                // Render the rest of the line
+                if (_cursorColumn < line.Length - 1)
+                {
+                    console.Write(line.Substring(_cursorColumn + 1), editorStyle);
+                }
+            }
+            else
+            {
+                console.Write(line, editorStyle);
+            }
+            console.WriteLine();
+        }
+
+        // Move cursor to the correct position
+        console.Cursor.Move(CursorDirection.Up, _lines.Count - _cursorLine - 1);
+        // Move to the correct column
+        for (int i = 0; i < _cursorColumn; i++)
+        {
+            console.Cursor.Move(CursorDirection.Right, 1);
+        }
+    }
+
+    private void InsertCharacter(char c)
+    {
+        var currentLine = _lines[_cursorLine];
+        if (_cursorColumn == currentLine.Length)
+        {
+            _lines[_cursorLine] = currentLine + c;
+        }
+        else
+        {
+            _lines[_cursorLine] = currentLine.Substring(0, _cursorColumn) + c + currentLine.Substring(_cursorColumn);
+        }
+        _cursorColumn++;
+    }
+
+    private void InsertNewline()
+    {
+        var currentLine = _lines[_cursorLine];
+        var beforeCursor = currentLine.Substring(0, _cursorColumn);
+        var afterCursor = currentLine.Substring(_cursorColumn);
+        
+        _lines[_cursorLine] = beforeCursor;
+        _lines.Insert(_cursorLine + 1, afterCursor);
+        
+        _cursorLine++;
+        _cursorColumn = 0;
+    }
+
+    private bool CanDeleteBackward()
+    {
+        if (_cursorLine == 0 && _cursorColumn == 0)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private void DeleteBackward()
+    {
+        if (_cursorColumn > 0)
+        {
+            // Delete character to the left
+            var currentLine = _lines[_cursorLine];
+            _lines[_cursorLine] = currentLine.Substring(0, _cursorColumn - 1) + currentLine.Substring(_cursorColumn);
+            _cursorColumn--;
+        }
+        else if (_cursorLine > 0)
+        {
+            // Delete newline and merge with previous line
+            var currentLine = _lines[_cursorLine];
+            _lines.RemoveAt(_cursorLine);
+            _cursorLine--;
+            _cursorColumn = _lines[_cursorLine].Length;
+            _lines[_cursorLine] += currentLine;
+        }
+    }
+
+    private bool CanDeleteForward()
+    {
+        if (_cursorLine == _lines.Count - 1 && _cursorColumn == _lines[_cursorLine].Length)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private void DeleteForward()
+    {
+        var currentLine = _lines[_cursorLine];
+        if (_cursorColumn < currentLine.Length)
+        {
+            // Delete character to the right
+            _lines[_cursorLine] = currentLine.Substring(0, _cursorColumn) + currentLine.Substring(_cursorColumn + 1);
+        }
+        else if (_cursorLine < _lines.Count - 1)
+        {
+            // Delete newline and merge with next line
+            var nextLine = _lines[_cursorLine + 1];
+            _lines.RemoveAt(_cursorLine + 1);
+            _lines[_cursorLine] += nextLine;
+        }
+    }
+
+    private void MoveCursorLeft()
+    {
+        if (_cursorColumn > 0)
+        {
+            _cursorColumn--;
+        }
+        else if (_cursorLine > 0)
+        {
+            _cursorLine--;
+            _cursorColumn = _lines[_cursorLine].Length;
+        }
+    }
+
+    private void MoveCursorRight()
+    {
+        if (_cursorColumn < _lines[_cursorLine].Length)
+        {
+            _cursorColumn++;
+        }
+        else if (_cursorLine < _lines.Count - 1)
+        {
+            _cursorLine++;
+            _cursorColumn = 0;
+        }
+    }
+
+    private void MoveCursorUp()
+    {
+        if (_cursorLine > 0)
+        {
+            _cursorLine--;
+            // Adjust cursor column to not exceed the length of the new line
+            _cursorColumn = System.Math.Min(_cursorColumn, _lines[_cursorLine].Length);
+        }
+    }
+
+    private void MoveCursorDown()
+    {
+        if (_cursorLine < _lines.Count - 1)
+        {
+            _cursorLine++;
+            // Adjust cursor column to not exceed the length of the new line
+            _cursorColumn = System.Math.Min(_cursorColumn, _lines[_cursorLine].Length);
+        }
+    }
+
+    private void SaveState()
+    {
+        // Save a copy of the current state
+        var stateCopy = new List<string>(_lines);
+        _undoStack.Push(stateCopy);
+        
+        // Limit the undo stack size
+        if (_undoStack.Count > MaxUndoSteps)
+        {
+            _undoStack.Pop();
+        }
+    }
+
+    private bool CanUndo()
+    {
+        return _undoStack.Count > 1; // Keep at least the initial state
+    }
+
+    private void Undo()
+    {
+        if (CanUndo())
+        {
+            _undoStack.Pop(); // Remove the current state
+            _lines = new List<string>(_undoStack.Peek()); // Restore the previous state
+            
+            // Reset cursor to the end of the last line
+            _cursorLine = _lines.Count - 1;
+            _cursorColumn = _lines[_cursorLine].Length;
+        }
+    }
+
+    private void CopyToClipboard()
+    {
+        // For simplicity, we'll copy the entire content
+        var content = string.Join("\n", _lines);
+        try
+        {
+            // Use cross-platform clipboard implementation
+            if (OperatingSystem.IsWindows())
+            {
+                // Windows implementation
+                SetClipboardTextWindows(content);
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                // macOS implementation
+                SetClipboardTextMacOS(content);
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                // Linux implementation
+                SetClipboardTextLinux(content);
+            }
+        }
+        catch
+        {
+            // Ignore clipboard errors
+        }
+    }
+
+    private void PasteFromClipboard()
+    {
+        try
+        {
+            string content = string.Empty;
+            if (OperatingSystem.IsWindows())
+            {
+                // Windows implementation
+                content = GetClipboardTextWindows();
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                // macOS implementation
+                content = GetClipboardTextMacOS();
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                // Linux implementation
+                content = GetClipboardTextLinux();
+            }
+            
+            if (!string.IsNullOrEmpty(content))
+            {
+                var pasteLines = content.Split('\n');
+                
+                if (pasteLines.Length == 1)
+                {
+                    // Single line paste
+                    InsertText(pasteLines[0]);
+                }
+                else
+                {
+                    // Multi line paste
+                    InsertMultiLineText(pasteLines);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore clipboard errors
+        }
+    }
+
+    #if NET6_0_OR_GREATER
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool OpenClipboard(System.IntPtr hWndNewOwner);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool CloseClipboard();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool EmptyClipboard();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern System.IntPtr SetClipboardData(uint uFormat, System.IntPtr hMem);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern System.IntPtr GetClipboardData(uint uFormat);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern System.IntPtr GlobalAlloc(uint uFlags, System.UIntPtr dwBytes);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern System.IntPtr GlobalLock(System.IntPtr hMem);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool GlobalUnlock(System.IntPtr hMem);
+
+    private const uint CF_UNICODETEXT = 13;
+    private const uint GMEM_MOVEABLE = 0x0002;
+    private const uint GMEM_ZEROINIT = 0x0040;
+    #endif
+
+    private void SetClipboardTextWindows(string text)
+    {
+        #if NET6_0_OR_GREATER
+        if (OpenClipboard(System.IntPtr.Zero))
+        {
+            try
+            {
+                EmptyClipboard();
+                var bytes = System.Text.Encoding.Unicode.GetBytes(text + '\0');
+                var hMem = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, (System.UIntPtr)bytes.Length);
+                if (hMem != System.IntPtr.Zero)
+                {
+                    var lpMem = GlobalLock(hMem);
+                    if (lpMem != System.IntPtr.Zero)
+                    {
+                        System.Runtime.InteropServices.Marshal.Copy(bytes, 0, lpMem, bytes.Length);
+                        GlobalUnlock(hMem);
+                        SetClipboardData(CF_UNICODETEXT, hMem);
+                    }
+                }
+            }
+            finally
+            {
+                CloseClipboard();
+            }
+        }
+        #endif
+    }
+
+    private string GetClipboardTextWindows()
+    {
+        #if NET6_0_OR_GREATER
+        string text = string.Empty;
+        if (OpenClipboard(System.IntPtr.Zero))
+        {
+            try
+            {
+                var hMem = GetClipboardData(CF_UNICODETEXT);
+                if (hMem != System.IntPtr.Zero)
+                {
+                    var lpMem = GlobalLock(hMem);
+                    if (lpMem != System.IntPtr.Zero)
+                    {
+                        text = System.Runtime.InteropServices.Marshal.PtrToStringUni(lpMem);
+                        GlobalUnlock(hMem);
+                    }
+                }
+            }
+            finally
+            {
+                CloseClipboard();
+            }
+        }
+        return text;
+        #else
+        return string.Empty;
+        #endif
+    }
+
+    private void SetClipboardTextMacOS(string text)
+    {
+        // Use pbcopy command on macOS
+        RunCommand("pbcopy", text);
+    }
+
+    private string GetClipboardTextMacOS()
+    {
+        // Use pbpaste command on macOS
+        return RunCommand("pbpaste", string.Empty);
+    }
+
+    private void SetClipboardTextLinux(string text)
+    {
+        // Use xclip command on Linux
+        RunCommand("xclip", text);
+    }
+
+    private string GetClipboardTextLinux()
+    {
+        // Use xclip command on Linux
+        return RunCommand("xclip", "-o");
+    }
+
+    private string RunCommand(string command, string input)
+    {
+        try
+        {
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = command,
+                    RedirectStandardInput = !string.IsNullOrEmpty(input),
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                }
+            };
+            
+            process.Start();
+            
+            if (!string.IsNullOrEmpty(input))
+            {
+                process.StandardInput.Write(input);
+                process.StandardInput.Close();
+            }
+            
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            
+            return output;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private void InsertText(string text)
+    {
+        foreach (var c in text)
+        {
+            InsertCharacter(c);
+        }
+    }
+
+    private void InsertMultiLineText(string[] lines)
+    {
+        if (lines.Length == 0)
+        {
+            return;
+        }
+        
+        // Insert the first line at the current cursor position
+        InsertText(lines[0]);
+        
+        // Insert the remaining lines as new lines
+        for (int i = 1; i < lines.Length; i++)
+        {
+            InsertNewline();
+            InsertText(lines[i]);
+        }
+    }
+}
