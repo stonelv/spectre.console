@@ -175,8 +175,11 @@ public sealed class JsonDiffText : JustInTimeRenderable
     {
         if (_diffRoot == null)
         {
+            var parser = Parser ?? JsonParser.Shared;
+            var left = parser.Parse(_leftJson);
+            var right = parser.Parse(_rightJson);
             var differ = new JsonDiffer(Options);
-            _diffRoot = differ.Diff(_leftJson, _rightJson);
+            _diffRoot = differ.Diff(left, right);
         }
 
         var defaultStyles = new JsonDiffStyles
@@ -267,17 +270,38 @@ public sealed class JsonDiffText : JustInTimeRenderable
         paragraph.Append(left.Name, style ?? styles.MemberStyle);
         paragraph.Append(": ", styles.ColonStyle);
 
+        var leftIsComplex = left.Value is JsonObject or JsonArray;
+        var rightIsComplex = right.Value is JsonObject or JsonArray;
+
         if (diffType == JsonDiffType.Modified)
         {
-            paragraph.Append("(", style);
-            RenderValueInline(paragraph, left.Value, styles, isDeleted: true);
-            paragraph.Append(" → ", style);
-            RenderValueInline(paragraph, right.Value, styles, isAdded: true);
-            paragraph.Append(")", style);
+            if (leftIsComplex || rightIsComplex)
+            {
+                paragraph.Append("(", style);
+                RenderComplexValueInline(paragraph, left.Value, styles, isDeleted: true);
+                paragraph.Append(" → ", style);
+                RenderComplexValueInline(paragraph, right.Value, styles, isAdded: true);
+                paragraph.Append(")", style);
+            }
+            else
+            {
+                paragraph.Append("(", style);
+                RenderValueInline(paragraph, left.Value, styles, isDeleted: true);
+                paragraph.Append(" → ", style);
+                RenderValueInline(paragraph, right.Value, styles, isAdded: true);
+                paragraph.Append(")", style);
+            }
         }
         else
         {
-            RenderValueInline(paragraph, right.Value, styles);
+            if (rightIsComplex)
+            {
+                RenderComplexValueInline(paragraph, right.Value, styles);
+            }
+            else
+            {
+                RenderValueInline(paragraph, right.Value, styles);
+            }
         }
     }
 
@@ -288,13 +312,43 @@ public sealed class JsonDiffText : JustInTimeRenderable
         paragraph.Append(member.Name, style ?? styles.MemberStyle);
         paragraph.Append(": ", styles.ColonStyle);
         
+        var isComplex = member.Value is JsonObject or JsonArray;
+        
         if (isLeft)
         {
-            RenderValueInline(paragraph, member.Value, styles, isDeleted: true);
+            if (isComplex)
+            {
+                RenderComplexValueInline(paragraph, member.Value, styles, isDeleted: true);
+            }
+            else
+            {
+                RenderValueInline(paragraph, member.Value, styles, isDeleted: true);
+            }
         }
         else
         {
-            RenderValueInline(paragraph, member.Value, styles, isAdded: true);
+            if (isComplex)
+            {
+                RenderComplexValueInline(paragraph, member.Value, styles, isAdded: true);
+            }
+            else
+            {
+                RenderValueInline(paragraph, member.Value, styles, isAdded: true);
+            }
+        }
+    }
+
+    private void RenderComplexValueInline(Paragraph paragraph, JsonSyntax value, JsonDiffStyles styles, bool isDeleted = false, bool isAdded = false)
+    {
+        var style = isDeleted ? styles.DeletedStyle : isAdded ? styles.AddedStyle : null;
+
+        if (value is JsonObject)
+        {
+            paragraph.Append("{...}", style ?? styles.BracesStyle);
+        }
+        else if (value is JsonArray)
+        {
+            paragraph.Append("[...]", style ?? styles.BracketsStyle);
         }
     }
 
@@ -345,12 +399,6 @@ public sealed class JsonDiffText : JustInTimeRenderable
                 break;
             case JsonNull nullVal:
                 paragraph.Append(nullVal.Lexeme, style ?? styles.NullStyle);
-                break;
-            case JsonObject:
-                paragraph.Append("{...}", style ?? styles.BracesStyle);
-                break;
-            case JsonArray:
-                paragraph.Append("[...]", style ?? styles.BracketsStyle);
                 break;
         }
     }
