@@ -50,12 +50,12 @@ public sealed class JsonDiffer
 
         if (left == null)
         {
-            return new JsonDiffNode(JsonDiffType.Added, null, right);
+            return new JsonDiffNode(JsonDiffType.Added, null, right, GetChildrenForAddedOrDeleted(right));
         }
 
         if (right == null)
         {
-            return new JsonDiffNode(JsonDiffType.Deleted, left, null);
+            return new JsonDiffNode(JsonDiffType.Deleted, left, null, GetChildrenForAddedOrDeleted(left));
         }
 
         if (left.GetType() != right.GetType())
@@ -75,27 +75,48 @@ public sealed class JsonDiffer
         };
     }
 
+    private static List<JsonDiffNode>? GetChildrenForAddedOrDeleted(JsonSyntax? syntax)
+    {
+        if (syntax is JsonObject obj)
+        {
+            var children = new List<JsonDiffNode>();
+            foreach (var member in obj.Members)
+            {
+                var valueChildren = GetChildrenForAddedOrDeleted(member.Value);
+                children.Add(new JsonDiffNode(JsonDiffType.Added, null, member, valueChildren));
+            }
+            return children;
+        }
+
+        if (syntax is JsonArray arr)
+        {
+            var children = new List<JsonDiffNode>();
+            foreach (var item in arr.Items)
+            {
+                children.Add(new JsonDiffNode(JsonDiffType.Added, null, item, GetChildrenForAddedOrDeleted(item)));
+            }
+            return children;
+        }
+
+        return null;
+    }
+
     private JsonDiffNode CompareObjects(JsonObject left, JsonObject right)
     {
-        var leftMembers = _options.IgnorePropertyOrder
-            ? (_options.IgnoreCase
-                ? left.Members.ToDictionary(m => m.Name, StringComparer.OrdinalIgnoreCase)
-                : left.Members.ToDictionary(m => m.Name))
-            : null;
-
-        var rightMembers = _options.IgnorePropertyOrder
-            ? (_options.IgnoreCase
-                ? right.Members.ToDictionary(m => m.Name, StringComparer.OrdinalIgnoreCase)
-                : right.Members.ToDictionary(m => m.Name))
-            : null;
-
         var children = new List<JsonDiffNode>();
-        var processedKeys = new HashSet<string>();
 
         if (_options.IgnorePropertyOrder)
         {
+            var leftMembers = _options.IgnoreCase
+                ? left.Members.ToDictionary(m => m.Name, StringComparer.OrdinalIgnoreCase)
+                : left.Members.ToDictionary(m => m.Name);
+
+            var rightMembers = _options.IgnoreCase
+                ? right.Members.ToDictionary(m => m.Name, StringComparer.OrdinalIgnoreCase)
+                : right.Members.ToDictionary(m => m.Name);
+
             var allKeys = new HashSet<string>(
-                leftMembers!.Keys.Concat(rightMembers!.Keys),
+                leftMembers.Keys.Concat(rightMembers.Keys),
                 _options.IgnoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
             foreach (var key in allKeys)
@@ -105,20 +126,22 @@ public sealed class JsonDiffer
 
                 if (leftMember != null && rightMember != null)
                 {
-                    var childDiff = CompareSyntax(leftMember.Value, rightMember.Value);
+                    var valueDiff = CompareSyntax(leftMember.Value, rightMember.Value);
                     children.Add(new JsonDiffNode(
-                        childDiff.DiffType,
+                        valueDiff.DiffType,
                         leftMember,
                         rightMember,
-                        new List<JsonDiffNode> { childDiff }));
+                        valueDiff.Children.Count > 0 ? valueDiff.Children.ToList() : null));
                 }
                 else if (leftMember != null)
                 {
-                    children.Add(new JsonDiffNode(JsonDiffType.Deleted, leftMember, null));
+                    var valueChildren = GetChildrenForAddedOrDeleted(leftMember.Value);
+                    children.Add(new JsonDiffNode(JsonDiffType.Deleted, leftMember, null, valueChildren));
                 }
                 else if (rightMember != null)
                 {
-                    children.Add(new JsonDiffNode(JsonDiffType.Added, null, rightMember));
+                    var valueChildren = GetChildrenForAddedOrDeleted(rightMember.Value);
+                    children.Add(new JsonDiffNode(JsonDiffType.Added, null, rightMember, valueChildren));
                 }
             }
         }
@@ -138,26 +161,31 @@ public sealed class JsonDiffer
 
                     if (namesMatch)
                     {
-                        var childDiff = CompareSyntax(leftMember.Value, rightMember.Value);
+                        var valueDiff = CompareSyntax(leftMember.Value, rightMember.Value);
                         children.Add(new JsonDiffNode(
-                            childDiff.DiffType,
+                            valueDiff.DiffType,
                             leftMember,
                             rightMember,
-                            new List<JsonDiffNode> { childDiff }));
+                            valueDiff.Children.Count > 0 ? valueDiff.Children.ToList() : null));
                     }
                     else
                     {
-                        children.Add(new JsonDiffNode(JsonDiffType.Deleted, leftMember, null));
-                        children.Add(new JsonDiffNode(JsonDiffType.Added, null, rightMember));
+                        var leftValueChildren = GetChildrenForAddedOrDeleted(leftMember.Value);
+                        children.Add(new JsonDiffNode(JsonDiffType.Deleted, leftMember, null, leftValueChildren));
+                        
+                        var rightValueChildren = GetChildrenForAddedOrDeleted(rightMember.Value);
+                        children.Add(new JsonDiffNode(JsonDiffType.Added, null, rightMember, rightValueChildren));
                     }
                 }
                 else if (leftMember != null)
                 {
-                    children.Add(new JsonDiffNode(JsonDiffType.Deleted, leftMember, null));
+                    var valueChildren = GetChildrenForAddedOrDeleted(leftMember.Value);
+                    children.Add(new JsonDiffNode(JsonDiffType.Deleted, leftMember, null, valueChildren));
                 }
                 else if (rightMember != null)
                 {
-                    children.Add(new JsonDiffNode(JsonDiffType.Added, null, rightMember));
+                    var valueChildren = GetChildrenForAddedOrDeleted(rightMember.Value);
+                    children.Add(new JsonDiffNode(JsonDiffType.Added, null, rightMember, valueChildren));
                 }
             }
         }
