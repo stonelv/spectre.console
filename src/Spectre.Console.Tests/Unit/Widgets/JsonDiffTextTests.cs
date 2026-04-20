@@ -312,4 +312,91 @@ public sealed class JsonDiffTextTests
 
         result.DiffType.ShouldBe(JsonDiffType.Unchanged);
     }
+
+    [Fact]
+    public void JsonDiffer_Should_Set_All_Children_To_Deleted_When_Deleting_Nested_Property()
+    {
+        var differ = new JsonDiffer();
+        var left = @"{
+            ""user"": {
+                ""name"": ""John"",
+                ""roles"": [""admin"", ""user""]
+            }
+        }";
+        var right = "{ }";
+
+        var result = differ.Diff(left, right);
+
+        result.DiffType.ShouldBe(JsonDiffType.Modified);
+        var deletedNodes = result.Children.Where(c => c.DiffType == JsonDiffType.Deleted).ToList();
+        deletedNodes.Count.ShouldBe(1);
+        
+        var userNode = deletedNodes[0];
+        userNode.Children.All(c => c.DiffType == JsonDiffType.Deleted).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void JsonDiffer_Should_Set_All_Children_To_Added_When_Adding_Nested_Property()
+    {
+        var differ = new JsonDiffer();
+        var left = "{ }";
+        var right = @"{
+            ""user"": {
+                ""name"": ""John"",
+                ""roles"": [""admin"", ""user""]
+            }
+        }";
+
+        var result = differ.Diff(left, right);
+
+        result.DiffType.ShouldBe(JsonDiffType.Modified);
+        var addedNodes = result.Children.Where(c => c.DiffType == JsonDiffType.Added).ToList();
+        addedNodes.Count.ShouldBe(1);
+        
+        var userNode = addedNodes[0];
+        userNode.Children.All(c => c.DiffType == JsonDiffType.Added).ShouldBeTrue();
+    }
+
+    [Fact]
+    public Task Should_Render_Deleted_Nested_Object_With_All_Children_As_Deleted()
+    {
+        var console = new TestConsole().Size(new Size(80, 25));
+        var json1 = @"{
+            ""id"": 1,
+            ""user"": {
+                ""name"": ""John"",
+                ""roles"": [""admin"", ""user""],
+                ""profile"": {
+                    ""email"": ""john@example.com""
+                }
+            }
+        }";
+        var json2 = @"{
+            ""id"": 1
+        }";
+
+        console.Write(new JsonDiffText(json1, json2));
+
+        return Verifier.Verify(console.Output);
+    }
+
+    [Fact]
+    public Task Should_Render_Added_Nested_Object_With_All_Children_As_Added()
+    {
+        var console = new TestConsole().Size(new Size(80, 25));
+        var json1 = @"{
+            ""id"": 1
+        }";
+        var json2 = @"{
+            ""id"": 1,
+            ""user"": {
+                ""name"": ""John"",
+                ""roles"": [""admin"", ""user""]
+            }
+        }";
+
+        console.Write(new JsonDiffText(json1, json2));
+
+        return Verifier.Verify(console.Output);
+    }
 }
