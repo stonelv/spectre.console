@@ -7,6 +7,8 @@ public sealed class CancellableProgressContext
 {
     private readonly ProgressContext _context;
     private readonly List<CancellableProgressTask> _tasks;
+    private readonly Dictionary<int, CancellableProgressTask> _taskCache;
+    private readonly Dictionary<int, CancellableProgressTaskView> _viewCache;
     private readonly object _taskLock;
     private readonly CancellationToken _cancellationToken;
 
@@ -57,6 +59,8 @@ public sealed class CancellableProgressContext
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _tasks = new List<CancellableProgressTask>();
+        _taskCache = new Dictionary<int, CancellableProgressTask>();
+        _viewCache = new Dictionary<int, CancellableProgressTaskView>();
         _taskLock = new object();
         _cancellationToken = cancellationToken;
     }
@@ -75,6 +79,7 @@ public sealed class CancellableProgressContext
             var task = _context.AddTask(description, autoStart, maxValue);
             var cancellableTask = new CancellableProgressTask(task);
             _tasks.Add(cancellableTask);
+            _taskCache[task.Id] = cancellableTask;
             return cancellableTask;
         }
     }
@@ -94,6 +99,7 @@ public sealed class CancellableProgressContext
             var task = _context.AddTaskAt(description, index, autoStart, maxValue);
             var cancellableTask = new CancellableProgressTask(task);
             _tasks.Insert(index, cancellableTask);
+            _taskCache[task.Id] = cancellableTask;
             return cancellableTask;
         }
     }
@@ -111,6 +117,7 @@ public sealed class CancellableProgressContext
             var task = _context.AddTask(description, settings);
             var cancellableTask = new CancellableProgressTask(task);
             _tasks.Add(cancellableTask);
+            _taskCache[task.Id] = cancellableTask;
             return cancellableTask;
         }
     }
@@ -140,6 +147,45 @@ public sealed class CancellableProgressContext
         lock (_taskLock)
         {
             return new List<CancellableProgressTask>(_tasks).AsReadOnly();
+        }
+    }
+
+    /// <summary>
+    /// Gets a task by its ID.
+    /// </summary>
+    /// <param name="id">The task ID.</param>
+    /// <returns>The task if found; otherwise, <c>null</c>.</returns>
+    internal CancellableProgressTask? GetTaskById(int id)
+    {
+        lock (_taskLock)
+        {
+            _taskCache.TryGetValue(id, out var task);
+            return task;
+        }
+    }
+
+    /// <summary>
+    /// Gets a read-only view of a task by its ID.
+    /// </summary>
+    /// <param name="id">The task ID.</param>
+    /// <returns>The read-only view if found; otherwise, <c>null</c>.</returns>
+    internal CancellableProgressTaskView? GetTaskViewById(int id)
+    {
+        lock (_taskLock)
+        {
+            if (_viewCache.TryGetValue(id, out var view))
+            {
+                return view;
+            }
+
+            if (_taskCache.TryGetValue(id, out var task))
+            {
+                view = new CancellableProgressTaskView(task);
+                _viewCache[id] = view;
+                return view;
+            }
+
+            return null;
         }
     }
 

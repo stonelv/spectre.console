@@ -29,6 +29,73 @@ public sealed class CancellableProgressTests
     }
 
     [Fact]
+    public void Should_Throw_OperationCanceledException_Before_Action_When_Token_Already_Cancelled()
+    {
+        // Given
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var console = new TestConsole()
+            .Interactive();
+
+        var progress = new CancellableProgress(console)
+            .Columns(new[] { new ProgressBarColumn() })
+            .AutoRefresh(false)
+            .AutoClear(false);
+
+        var actionCalled = false;
+
+        // When & Then
+        var exception = Should.Throw<OperationCanceledException>(() =>
+        {
+            progress.Start(ctx =>
+            {
+                actionCalled = true;
+            }, cts.Token);
+        });
+
+        actionCalled.ShouldBe(false);
+    }
+
+    [Fact]
+    public void Should_Stop_Unfinished_Tasks_When_Cancelled()
+    {
+        // Given
+        using var cts = new CancellationTokenSource();
+
+        var console = new TestConsole()
+            .Interactive();
+
+        var progress = new CancellableProgress(console)
+            .Columns(new[] { new ProgressBarColumn() })
+            .AutoRefresh(false)
+            .AutoClear(false)
+            .ShowErrorSummary(false);
+
+        CancellableProgressTask? task1 = null;
+        CancellableProgressTask? task2 = null;
+
+        // When
+        progress.Start(ctx =>
+        {
+            task1 = ctx.AddTask("Task 1");
+            task2 = ctx.AddTask("Task 2");
+
+            task1.Value = task1.MaxValue;
+
+            cts.Cancel();
+
+            Thread.Sleep(10);
+        }, cts.Token);
+
+        // Then
+        task1.ShouldNotBeNull();
+        task2.ShouldNotBeNull();
+        task1.IsFinished.ShouldBe(true);
+        task2.IsFinished.ShouldBe(true);
+    }
+
+    [Fact]
     public void Should_Track_Failed_Tasks()
     {
         // Given
@@ -293,7 +360,6 @@ public sealed class CancellableProgressTests
     {
         // Given
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
 
         var console = new TestConsole()
             .Interactive();
@@ -303,23 +369,20 @@ public sealed class CancellableProgressTests
             .AutoRefresh(false)
             .AutoClear(false);
 
-        var isCancellationRequested = false;
+        var isCancellationRequestedBefore = true;
+        var isCancellationRequestedAfter = false;
 
         // When
-        try
+        progress.Start(ctx =>
         {
-            progress.Start(ctx =>
-            {
-                isCancellationRequested = ctx.IsCancellationRequested;
-            }, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            // 预期的异常
-        }
+            isCancellationRequestedBefore = ctx.IsCancellationRequested;
+            cts.Cancel();
+            isCancellationRequestedAfter = ctx.IsCancellationRequested;
+        }, cts.Token);
 
         // Then
-        isCancellationRequested.ShouldBe(true);
+        isCancellationRequestedBefore.ShouldBe(false);
+        isCancellationRequestedAfter.ShouldBe(true);
     }
 
     [Fact]
@@ -375,6 +438,90 @@ public sealed class CancellableProgressTests
 
         // Then
         Should.NotThrow(RunAsync);
+    }
+
+    [Fact]
+    public void Should_RenderHook_Receive_ReadOnly_Views()
+    {
+        // Given
+        var console = new TestConsole()
+            .Interactive();
+
+        var progress = new CancellableProgress(console)
+            .Columns(new[] { new ProgressBarColumn() })
+            .AutoRefresh(false)
+            .AutoClear(false);
+
+        IReadOnlyList<CancellableProgressTaskView>? receivedViews = null;
+
+        progress.RenderHook = (renderable, tasks) =>
+        {
+            receivedViews = tasks;
+            return renderable;
+        };
+
+        // When
+        progress.Start(ctx =>
+        {
+            var task = ctx.AddTask("Task 1");
+            task.Value = task.MaxValue;
+            ctx.Refresh();
+        });
+
+        // Then
+        receivedViews.ShouldNotBeNull();
+        receivedViews.Count.ShouldBe(1);
+        receivedViews[0].Description.ShouldBe("Task 1");
+
+        var viewType = receivedViews[0].GetType();
+        viewType.GetMethod("Fail").ShouldBeNull();
+        viewType.GetMethod("StartTask").ShouldBeNull();
+        viewType.GetMethod("StopTask").ShouldBeNull();
+    }
+
+    [Fact]
+    public void Should_RenderHook_Receive_Same_View_Instance_For_Same_Task()
+    {
+        // Given
+        var console = new TestConsole()
+            .Interactive();
+
+        var progress = new CancellableProgress(console)
+            .Columns(new[] { new ProgressBarColumn() })
+            .AutoRefresh(false)
+            .AutoClear(false);
+
+        CancellableProgressTaskView? firstView = null;
+        CancellableProgressTaskView? secondView = null;
+        var callCount = 0;
+
+        progress.RenderHook = (renderable, tasks) =>
+        {
+            callCount++;
+            if (callCount == 1 && tasks.Count > 0)
+            {
+                firstView = tasks[0];
+            }
+            else if (callCount == 2 && tasks.Count > 0)
+            {
+                secondView = tasks[0];
+            }
+            return renderable;
+        };
+
+        // When
+        progress.Start(ctx =>
+        {
+            var task = ctx.AddTask("Task 1");
+            ctx.Refresh();
+            task.Increment(50);
+            ctx.Refresh();
+        });
+
+        // Then
+        firstView.ShouldNotBeNull();
+        secondView.ShouldNotBeNull();
+        ReferenceEquals(firstView, secondView).ShouldBe(true);
     }
 
     [Fact]

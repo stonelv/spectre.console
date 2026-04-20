@@ -7,12 +7,14 @@ public sealed class CancellableProgress
 {
     private readonly IAnsiConsole _console;
     private readonly Progress _progress;
-    private Func<IRenderable, IReadOnlyList<CancellableProgressTask>, IRenderable> _renderHook;
+    private Func<IRenderable, IReadOnlyList<CancellableProgressTaskView>, IRenderable> _renderHook;
+    private CancellableProgressContext? _currentContext;
 
     /// <summary>
     /// Gets or sets a optional custom render function.
+    /// Note: The tasks provided to the hook are read-only views and cannot be modified.
     /// </summary>
-    public Func<IRenderable, IReadOnlyList<CancellableProgressTask>, IRenderable> RenderHook
+    public Func<IRenderable, IReadOnlyList<CancellableProgressTaskView>, IRenderable> RenderHook
     {
         get => _renderHook;
         set
@@ -93,6 +95,8 @@ public sealed class CancellableProgress
         _console = console ?? throw new ArgumentNullException(nameof(console));
         _progress = new Progress(console);
         _renderHook = (renderable, _) => renderable;
+        _currentContext = null;
+        _progress.RenderHook = CreateAdapter(_renderHook);
     }
 
     /// <summary>
@@ -199,29 +203,62 @@ public sealed class CancellableProgress
             throw new ArgumentNullException(nameof(action));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         CancellableProgressContext? cancellableContext = null;
+        T result = default!;
 
-        var result = await _progress.StartAsync(async ctx =>
+        using var registration = cancellationToken.Register(() =>
         {
-            cancellableContext = new CancellableProgressContext(ctx, cancellationToken);
-            return await action(cancellableContext).ConfigureAwait(false);
-        }).ConfigureAwait(false);
-
-        if (ShowErrorSummary && cancellableContext?.HasFailedTasks == true)
-        {
-            var errorSummary = new ErrorSummary(cancellableContext.FailedTasks)
+            if (cancellableContext != null)
             {
-                Title = ErrorSummaryTitle
-            };
-            _console.WriteLine();
-            _console.Write(errorSummary);
+                var tasks = cancellableContext.GetTasks();
+                foreach (var task in tasks.Where(t => !t.IsFinished))
+                {
+                    task.StopTask();
+                }
+            }
+        });
+
+        try
+        {
+            result = await _progress.StartAsync(async ctx =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                cancellableContext = new CancellableProgressContext(ctx, cancellationToken);
+                _currentContext = cancellableContext;
+
+                return await action(cancellableContext).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        finally
+        {
+            _currentContext = null;
+
+            if (cancellableContext?.HasFailedTasks == true)
+            {
+                if (ShowErrorSummary)
+                {
+                    var errorSummary = new ErrorSummary(cancellableContext.FailedTasks)
+                    {
+                        Title = ErrorSummaryTitle
+                    };
+                    _console.WriteLine();
+                    _console.Write(errorSummary);
+                }
+            }
         }
 
         return result;
     }
 
-    private static Func<IRenderable, IReadOnlyList<ProgressTask>, IRenderable> CreateAdapter(
-        Func<IRenderable, IReadOnlyList<CancellableProgressTask>, IRenderable>? hook)
+    private Func<IRenderable, IReadOnlyList<ProgressTask>, IRenderable> CreateAdapter(
+        Func<IRenderable, IReadOnlyList<CancellableProgressTaskView>, IRenderable>? hook)
     {
         if (hook is null)
         {
@@ -230,8 +267,22 @@ public sealed class CancellableProgress
 
         return (renderable, tasks) =>
         {
-            var cancellableTasks = tasks.Select(t => new CancellableProgressTask(t)).ToList().AsReadOnly();
-            return hook(renderable, cancellableTasks);
+            if (_currentContext is null)
+            {
+                return renderable;
+            }
+
+            var viewTasks = new List<CancellableProgressTaskView>(tasks.Count);
+            foreach (var task in tasks)
+            {
+                var view = _currentContext.GetTaskViewById(task.Id);
+                if (view != null)
+                {
+                    viewTasks.Add(view);
+                }
+            }
+
+            return hook(renderable, viewTasks.AsReadOnly());
         };
     }
 }
