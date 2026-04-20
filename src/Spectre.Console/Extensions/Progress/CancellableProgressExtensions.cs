@@ -36,11 +36,12 @@ public static class CancellableProgressExtensions
 
     /// <summary>
     /// Sets an optional hook to intercept rendering.
+    /// Note: The tasks provided to the hook are read-only views and cannot be modified.
     /// </summary>
     /// <param name="progress">The <see cref="CancellableProgress"/> instance.</param>
     /// <param name="renderHook">The custom render function.</param>
     /// <returns>The same instance so that multiple calls can be chained.</returns>
-    public static CancellableProgress UseRenderHook(this CancellableProgress progress, Func<IRenderable, IReadOnlyList<CancellableProgressTask>, IRenderable> renderHook)
+    public static CancellableProgress UseRenderHook(this CancellableProgress progress, Func<IRenderable, IReadOnlyList<CancellableProgressTaskView>, IRenderable> renderHook)
     {
         if (progress is null)
         {
