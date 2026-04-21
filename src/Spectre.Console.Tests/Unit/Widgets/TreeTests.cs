@@ -182,4 +182,81 @@ public class TreeTests
         // Then
         return Verifier.Verify(console.Output);
     }
+
+    [Fact]
+    [Expectation("Render_Dotted_UnicodeDisabled")]
+    public Task Should_Render_Tree_With_Dotted_Guide_And_Unicode_Disabled_Fallback_To_Ascii()
+    {
+        // Given
+        var console = new TestConsole();
+        console.Profile.Capabilities.Unicode = false;
+
+        var tree = new Tree(new Text("Root node")).Guide(TreeGuide.Dotted);
+
+        var child1 = new TreeNode(new Text("child1"));
+        var child1Grandchild = new TreeNode(new Text("grandchild"));
+        child1.AddNode(child1Grandchild);
+
+        var child2 = new TreeNode(new Text("child2"));
+        tree.AddNodes(child1, child2);
+
+        // When
+        console.Write(tree);
+
+        // Then
+        return Verifier.Verify(console.Output);
+    }
+
+    [Fact]
+    public void Should_DottedTreeGuide_Fallback_To_Ascii_When_Unicode_Disabled()
+    {
+        // Given
+        var console = new TestConsole();
+        console.Profile.Capabilities.Unicode = false;
+
+        var tree = new Tree(new Text("Root")).Guide(TreeGuide.Dotted);
+        var child1 = new TreeNode(new Text("Child1"));
+        var child1Grandchild = new TreeNode(new Text("Grandchild"));
+        child1.AddNode(child1Grandchild);
+        var child2 = new TreeNode(new Text("Child2"));
+        tree.AddNodes(child1, child2);
+
+        // When
+        console.Write(tree);
+
+        // Then
+        console.Output.ShouldContain("|-- ");
+        console.Output.ShouldContain("`-- ");
+        console.Output.ShouldContain("|   ");
+        console.Output.ShouldNotContain("┆");
+        console.Output.ShouldNotContain("┄");
+        console.Output.ShouldNotContain("├");
+        console.Output.ShouldNotContain("└");
+    }
+
+    [Fact]
+    public void Should_DottedTreeGuide_Use_Unicode_When_Enabled()
+    {
+        // Given
+        var console = new TestConsole();
+        console.Profile.Capabilities.Unicode = true;
+
+        var tree = new Tree(new Text("Root")).Guide(TreeGuide.Dotted);
+        var child1 = new TreeNode(new Text("Child1"));
+        var grandchild = new TreeNode(new Text("Grandchild"));
+        child1.AddNode(grandchild);
+        tree.AddNodes(child1, new TreeNode(new Text("Child2")));
+
+        // When
+        console.Write(tree);
+
+        // Then
+        console.Output.ShouldContain("┆");
+        console.Output.ShouldContain("┄");
+        console.Output.ShouldContain("├");
+        console.Output.ShouldContain("└");
+        console.Output.ShouldNotContain("|-- ");
+        console.Output.ShouldNotContain("`-- ");
+        console.Output.ShouldNotContain("|   ");
+    }
 }

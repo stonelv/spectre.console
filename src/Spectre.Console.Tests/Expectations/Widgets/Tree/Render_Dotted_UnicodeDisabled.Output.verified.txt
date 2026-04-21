@@ -1,0 +1,4 @@
+Root node
+|-- child1
+|   `-- grandchild
+`-- child2
