@@ -145,3 +145,52 @@ table.Columns[0].Width(15);
 // Shows separator between each row
 table.ShowRowSeparators();
 ```
+
+## Sorting
+
+You can sort table rows by a specific column using the `SortBy` method.
+The sorting supports automatic type detection for strings, numbers (int, long, decimal), dates (DateTime, DateTimeOffset).
+
+```csharp
+// Sort by column name (ascending)
+table.SortBy("Name");
+
+// Sort by column name (descending)
+table.SortBy("Age", descending: true);
+
+// Or use the shorthand method
+table.SortByDescending("Age");
+
+// Sort by column index
+table.SortBy(0);
+
+// Clear any existing sorting
+table.ClearSort();
+```
+
+### Sorting with custom comparer
+
+For advanced sorting scenarios, you can provide a custom `IComparer<TableRow>`.
+
+```csharp
+// Custom sort using a comparer
+table.SortBy(new CustomTableRowComparer());
+
+public class CustomTableRowComparer : IComparer<TableRow>
+{
+    public int Compare(TableRow? x, TableRow? y)
+    {
+        // Custom comparison logic
+        // Access cells via index: x?[0], y?[0]
+        return 0;
+    }
+}
+```
+
+### Compatibility
+
+Sorting is fully compatible with all existing table features:
+- **Styles and Markup**: Styled cells (e.g., `[blue]Text[/]`) are sorted by their text content, ignoring markup tags
+- **Alignment**: Column alignment (Left, Right, Center) is preserved after sorting
+- **Headers and Footers**: Table headers and footers remain in their original positions; only data rows are sorted
+- **Overflow and Truncation**: Cell overflow settings (Crop, Ellipsis, Fold) are unaffected by sorting

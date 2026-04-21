@@ -757,4 +757,337 @@ public sealed class TableTests
         // Then
         return Verifier.Verify(console.Output);
     }
+
+    public sealed class TheSortByMethod
+    {
+        [Fact]
+        [Expectation("Sort_String_Ascending")]
+        public Task Should_Sort_Table_By_String_Column_Ascending()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Age");
+            table.AddRow("Charlie", "35");
+            table.AddRow("Alice", "25");
+            table.AddRow("Bob", "30");
+            table.SortBy("Name");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_String_Descending")]
+        public Task Should_Sort_Table_By_String_Column_Descending()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Age");
+            table.AddRow("Charlie", "35");
+            table.AddRow("Alice", "25");
+            table.AddRow("Bob", "30");
+            table.SortBy("Name", descending: true);
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_Integer_Ascending")]
+        public Task Should_Sort_Table_By_Integer_Column_Ascending()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Age");
+            table.AddRow("Charlie", "35");
+            table.AddRow("Alice", "25");
+            table.AddRow("Bob", "30");
+            table.SortBy("Age");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_Integer_Descending")]
+        public Task Should_Sort_Table_By_Integer_Column_Descending()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Age");
+            table.AddRow("Charlie", "35");
+            table.AddRow("Alice", "25");
+            table.AddRow("Bob", "30");
+            table.SortByDescending("Age");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_Date_Ascending")]
+        public Task Should_Sort_Table_By_Date_Column_Ascending()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Event", "Date");
+            table.AddRow("Event C", "2024-03-15");
+            table.AddRow("Event A", "2024-01-10");
+            table.AddRow("Event B", "2024-02-20");
+            table.SortBy(1);
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_Date_Descending")]
+        public Task Should_Sort_Table_By_Date_Column_Descending()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Event", "Date");
+            table.AddRow("Event C", "2024-03-15");
+            table.AddRow("Event A", "2024-01-10");
+            table.AddRow("Event B", "2024-02-20");
+            table.SortByDescending(1);
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_By_Column_Index")]
+        public Task Should_Sort_Table_By_Column_Index()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Age", "City");
+            table.AddRow("Charlie", "35", "New York");
+            table.AddRow("Alice", "25", "London");
+            table.AddRow("Bob", "30", "Paris");
+            table.SortBy(0);
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_With_Footers")]
+        public Task Should_Sort_Table_While_Keeping_Headers_And_Footers()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumn(new TableColumn("Name").Footer("Total"));
+            table.AddColumn(new TableColumn("Age").Footer("80"));
+            table.AddRow("Charlie", "35");
+            table.AddRow("Alice", "25");
+            table.AddRow("Bob", "20");
+            table.SortBy("Age");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Clear_Sort")]
+        public Task Should_Revert_To_Original_Order_After_ClearSort()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Age");
+            table.AddRow("Charlie", "35");
+            table.AddRow("Alice", "25");
+            table.AddRow("Bob", "30");
+            table.SortBy("Name");
+            table.ClearSort();
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_With_Alignment")]
+        public Task Should_Sort_Table_With_Column_Alignment()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumn(new TableColumn("Name") { Alignment = Justify.Left });
+            table.AddColumn(new TableColumn("Age") { Alignment = Justify.Right });
+            table.AddColumn(new TableColumn("Score") { Alignment = Justify.Center });
+            table.AddRow("Charlie", "35", "88");
+            table.AddRow("Alice", "25", "95");
+            table.AddRow("Bob", "30", "75");
+            table.SortBy("Score", descending: true);
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_With_Styles")]
+        public Task Should_Sort_Table_With_Styled_Cells()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Status");
+            table.AddRow("[blue]Charlie[/]", "[green]Active[/]");
+            table.AddRow("[red]Alice[/]", "[yellow]Pending[/]");
+            table.AddRow("[cyan]Bob[/]", "[red]Inactive[/]");
+            table.SortBy("Name");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_Decimal_Values")]
+        public Task Should_Sort_Table_By_Decimal_Values()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Product", "Price");
+            table.AddRow("Product C", "99.99");
+            table.AddRow("Product A", "19.99");
+            table.AddRow("Product B", "49.50");
+            table.SortBy("Price");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        public void Should_Throw_If_Column_Name_Not_Found()
+        {
+            // Given
+            var table = new Table();
+            table.AddColumns("Name", "Age");
+            table.AddRow("Alice", "25");
+
+            // When
+            var result = Record.Exception(() => table.SortBy("NonExistent"));
+
+            // Then
+            result.ShouldBeOfType<ArgumentException>()
+                .Message.ShouldContain("not found");
+        }
+
+        [Fact]
+        public void Should_Throw_If_Column_Index_Is_Negative()
+        {
+            // Given
+            var table = new Table();
+            table.AddColumns("Name", "Age");
+
+            // When
+            var result = Record.Exception(() => table.SortBy(-1));
+
+            // Then
+            result.ShouldBeOfType<ArgumentOutOfRangeException>();
+        }
+
+        [Fact]
+        [Expectation("Sort_Empty_Table")]
+        public Task Should_Sort_Empty_Table_Without_Error()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Age");
+            table.SortBy("Name");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_Single_Row")]
+        public Task Should_Sort_Table_With_Single_Row()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Age");
+            table.AddRow("Alice", "25");
+            table.SortBy("Name");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_With_Hidden_Headers")]
+        public Task Should_Sort_Table_With_Hidden_Headers()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.HideHeaders();
+            table.AddColumns("Name", "Age");
+            table.AddRow("Charlie", "35");
+            table.AddRow("Alice", "25");
+            table.AddRow("Bob", "30");
+            table.SortBy(0);
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+    }
 }

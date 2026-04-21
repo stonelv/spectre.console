@@ -1,0 +1,7 @@
+┌─────────┬──────────┐
+│ Name    │ Status   │
+├─────────┼──────────┤
+│ Alice   │ Pending  │
+│ Bob     │ Inactive │
+│ Charlie │ Active   │
+└─────────┴──────────┘
