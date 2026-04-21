@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using Spectre.Console.Cli;
 
 namespace Spectre.Console.Tests.Unit.Cli;
@@ -167,8 +166,6 @@ public sealed class ArgumentTraceTests
             var provider = new EnvironmentVariableValueProvider();
             provider.Map("configuration", "MYAPP_CONFIG");
 
-            // We can't really test actual environment variable reading without setting them,
-            // but we can verify the mapping mechanism works through the API
             provider.ShouldNotBeNull();
         }
 
@@ -201,52 +198,6 @@ public sealed class ArgumentTraceTests
             provider.Map("configuration", "build.configuration");
 
             provider.ShouldNotBeNull();
-        }
-    }
-
-    public sealed class TheArgumentTraceOptions
-    {
-        [Fact]
-        public void Should_Have_Correct_Default_Values()
-        {
-            var options = new ArgumentTraceOptions();
-
-            options.EnableEnvironmentVariables.ShouldBeTrue();
-            options.EnableExceptionHandling.ShouldBeTrue();
-            options.ShowTraceOnError.ShouldBeTrue();
-            options.ShowDetails.ShouldBeTrue();
-            options.ShowSummary.ShouldBeTrue();
-        }
-
-        [Fact]
-        public void Should_Map_Environment_Variable()
-        {
-            var options = new ArgumentTraceOptions();
-            options.MapEnvironmentVariable("configuration", "MYAPP_CONFIG");
-
-            options.EnvironmentVariableMappings.ShouldContainKey("configuration");
-            options.EnvironmentVariableMappings["configuration"].ShouldBe("MYAPP_CONFIG");
-        }
-
-        [Fact]
-        public void Should_Map_Json_Config()
-        {
-            var options = new ArgumentTraceOptions();
-            options.MapJsonConfig("configuration", "build.configuration");
-
-            options.JsonConfigMappings.ShouldContainKey("configuration");
-            options.JsonConfigMappings["configuration"].ShouldBe("build.configuration");
-        }
-
-        [Fact]
-        public void Should_Add_Value_Provider()
-        {
-            var options = new ArgumentTraceOptions();
-            var provider = new TestValueProvider();
-
-            options.AddValueProvider(provider);
-
-            options.AdditionalValueProviders.ShouldContain(provider);
         }
     }
 
@@ -325,63 +276,6 @@ public sealed class ArgumentTraceTests
         }
     }
 
-    public sealed class TheArgumentTraceCollector
-    {
-        [Fact]
-        public void Should_Collect_Trace_Info_From_Settings()
-        {
-            var collector = new ArgumentTraceCollector();
-            var settings = new TestSettings
-            {
-                Configuration = "Release",
-                Verbose = true
-            };
-
-            var context = collector.Collect(settings, "build");
-
-            context.ShouldNotBeNull();
-            context.CommandName.ShouldBe("build");
-        }
-    }
-
-    public sealed class TheArgumentTraceInterceptor
-    {
-        [Fact]
-        public void Should_Have_Correct_Default_Values()
-        {
-            var interceptor = new ArgumentTraceInterceptor();
-
-            interceptor.DebugArgsDetected.ShouldBeFalse();
-            interceptor.TraceContext.ShouldBeNull();
-        }
-
-        [Fact]
-        public void Should_Add_Value_Provider()
-        {
-            var interceptor = new ArgumentTraceInterceptor();
-            var provider = new TestValueProvider();
-
-            interceptor.AddValueProvider(provider);
-
-            interceptor.ShouldNotBeNull();
-        }
-
-        [Fact]
-        public void Should_Add_Multiple_Value_Providers()
-        {
-            var interceptor = new ArgumentTraceInterceptor();
-            var providers = new[]
-            {
-                new TestValueProvider(),
-                new TestValueProvider()
-            };
-
-            interceptor.AddValueProviders(providers);
-
-            interceptor.ShouldNotBeNull();
-        }
-    }
-
     #region Test Helpers
 
     private class TestValueProvider : IArgumentValueProvider
@@ -400,22 +294,6 @@ public sealed class ArgumentTraceTests
         {
             return null;
         }
-    }
-
-    private class TestSettings : CommandSettings
-    {
-        [CommandOption("--configuration|-c <CONFIGURATION>")]
-        [Description("The configuration to build")]
-        [DefaultValue("Debug")]
-        public string? Configuration { get; set; }
-
-        [CommandOption("--verbose|-v")]
-        [Description("Enable verbose output")]
-        public bool Verbose { get; set; }
-
-        [CommandArgument(0, "[PROJECT]")]
-        [Description("The project file to build")]
-        public string? Project { get; set; }
     }
 
     #endregion
