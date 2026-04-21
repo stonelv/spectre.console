@@ -455,4 +455,87 @@ public sealed class FormPromptTests
         // Then
         form.InstructionsText.ShouldBe("Custom instructions");
     }
+
+    [Theory]
+    [InlineData("test", "test", 0, 0)]
+    [InlineData("test", "test", 2, 2)]
+    [InlineData("test", "test", 4, 4)]
+    [InlineData("[test]", "[[test]]", 0, 0)]
+    [InlineData("[test]", "[[test]]", 1, 2)]
+    [InlineData("[test]", "[[test]]", 6, 8)]
+    [InlineData("a[b]c", "a[[b]]c", 0, 0)]
+    [InlineData("a[b]c", "a[[b]]c", 1, 1)]
+    [InlineData("a[b]c", "a[[b]]c", 2, 3)]
+    [InlineData("a[b]c", "a[[b]]c", 3, 4)]
+    [InlineData("a[b]c", "a[[b]]c", 4, 6)]
+    [InlineData("a[b]c", "a[[b]]c", 5, 7)]
+    public void EscapeMarkup_Should_Correctly_Calculate_Cursor_Position(
+        string input, string expectedEscaped, int cursorPosition, int expectedEscapedPosition)
+    {
+        // Given
+        var escaped = input.EscapeMarkup();
+
+        // When
+        var actualEscapedPosition = CalculateEscapedCursorPosition(input, cursorPosition);
+
+        // Then
+        escaped.ShouldBe(expectedEscaped);
+        actualEscapedPosition.ShouldBe(expectedEscapedPosition);
+    }
+
+    [Theory]
+    [InlineData('*', "a", 0, "*", 0, "[underline]_[/]*")]
+    [InlineData('*', "a", 1, "*", 1, "*[underline]_[/]")]
+    [InlineData('*', "ab", 1, "**", 1, "*[underline]_[/]*")]
+    [InlineData('*', "abc", 3, "***", 3, "***[underline]_[/]")]
+    public void Masked_Text_Should_Be_Correctly_Escaped(
+        char mask, string input, int cursorPosition,
+        string expectedMasked, int expectedEscapedCursorPosition,
+        string expectedFinalMarkup)
+    {
+        // Given
+        var masked = new string(mask, input.Length);
+        var escapedMasked = masked.EscapeMarkup();
+        var escapedCursorPosition = CalculateEscapedCursorPosition(masked, cursorPosition);
+
+        // When
+        var cursorMarkup = "[underline]_[/]";
+        string result;
+        if (escapedCursorPosition < escapedMasked.Length)
+        {
+            result = escapedMasked.Insert(escapedCursorPosition, cursorMarkup);
+        }
+        else
+        {
+            result = escapedMasked + cursorMarkup;
+        }
+
+        // Then
+        masked.ShouldBe(expectedMasked);
+        escapedCursorPosition.ShouldBe(expectedEscapedCursorPosition);
+        result.ShouldBe(expectedFinalMarkup);
+    }
+
+    private static int CalculateEscapedCursorPosition(string inputText, int cursorPosition)
+    {
+        if (cursorPosition <= 0)
+        {
+            return 0;
+        }
+
+        var escapedPosition = 0;
+        for (var i = 0; i < cursorPosition && i < inputText.Length; i++)
+        {
+            if (inputText[i] == '[' || inputText[i] == ']')
+            {
+                escapedPosition += 2;
+            }
+            else
+            {
+                escapedPosition += 1;
+            }
+        }
+
+        return escapedPosition;
+    }
 }

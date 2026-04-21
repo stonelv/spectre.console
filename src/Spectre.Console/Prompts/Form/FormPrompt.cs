@@ -524,18 +524,23 @@ public sealed class FormPrompt : IPrompt<FormResult>
         else if (isSecret && mask.HasValue)
         {
             var masked = new string(mask.Value, state.InputText.Length);
+            var escapedMasked = masked.EscapeMarkup();
+
             if (isFocused)
             {
-                if (state.CursorPosition < masked.Length)
+                var escapedCursorPosition = CalculateEscapedCursorPosition(masked, state.CursorPosition);
+                var cursorMarkup = "[underline]_[/]";
+                if (escapedCursorPosition < escapedMasked.Length)
                 {
-                    masked = masked.Insert(state.CursorPosition, "[underline]_[/]");
+                    escapedMasked = escapedMasked.Insert(escapedCursorPosition, cursorMarkup);
                 }
                 else
                 {
-                    masked += "[underline]_[/]";
+                    escapedMasked += cursorMarkup;
                 }
             }
-            builder.Append(masked);
+
+            builder.Append(escapedMasked);
         }
         else if (isSecret)
         {
