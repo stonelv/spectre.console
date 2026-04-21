@@ -28,6 +28,24 @@ public sealed class AnsiConsoleSettings
     public InteractionSupport Interactive { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether or not the
+    /// terminal supports Unicode.
+    /// </summary>
+    public UnicodeSupport Unicode { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether or not the
+    /// terminal supports emoji.
+    /// </summary>
+    public EmojiSupport Emoji { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether or not the
+    /// terminal supports hyperlinks.
+    /// </summary>
+    public LinksSupport Links { get; set; }
+
+    /// <summary>
     /// Gets or sets the exclusivity mode.
     /// </summary>
     public IExclusivityMode? ExclusivityMode { get; set; }

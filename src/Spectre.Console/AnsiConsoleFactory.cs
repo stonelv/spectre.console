@@ -43,15 +43,37 @@ public sealed class AnsiConsoleFactory
             interactive = !System.Console.IsInputRedirected;
         }
 
+        // Detect Unicode support
+        var supportsUnicode = settings.Unicode == UnicodeSupport.Yes;
+        if (settings.Unicode == UnicodeSupport.Detect)
+        {
+            supportsUnicode = encoding.EncodingName.ContainsExact("Unicode");
+        }
+
+        // Detect Emoji support
+        var supportsEmoji = settings.Emoji == EmojiSupport.Yes;
+        if (settings.Emoji == EmojiSupport.Detect)
+        {
+            supportsEmoji = EmojiDetector.Detect(supportsUnicode, settings.EnvironmentVariables);
+        }
+
+        // Detect Links support
+        var supportsLinks = settings.Links == LinksSupport.Yes;
+        if (settings.Links == LinksSupport.Detect)
+        {
+            supportsLinks = supportsAnsi && !legacyConsole;
+        }
+
         var profile = new Profile(output, encoding);
 
         profile.Capabilities.ColorSystem = colorSystem;
         profile.Capabilities.Ansi = supportsAnsi;
-        profile.Capabilities.Links = supportsAnsi && !legacyConsole;
+        profile.Capabilities.Links = supportsLinks;
         profile.Capabilities.Legacy = legacyConsole;
         profile.Capabilities.Interactive = interactive;
-        profile.Capabilities.Unicode = encoding.EncodingName.ContainsExact("Unicode");
+        profile.Capabilities.Unicode = supportsUnicode;
         profile.Capabilities.AlternateBuffer = supportsAnsi && !legacyConsole;
+        profile.Capabilities.Emoji = supportsEmoji;
 
         // Enrich the profile
         ProfileEnricher.Enrich(
