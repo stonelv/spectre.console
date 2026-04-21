@@ -16,7 +16,8 @@ internal static class ExceptionFormatter
             throw new ArgumentNullException(nameof(exception));
         }
 
-        return GetException(exception, settings, new HashSet<Exception>(), depth: 0);
+        var visitedExceptions = new HashSet<Exception> { exception };
+        return GetException(exception, settings, visitedExceptions, depth: 0);
     }
 
     private static IRenderable GetException(Exception exception, ExceptionSettings settings, HashSet<Exception> visitedExceptions, int depth)
