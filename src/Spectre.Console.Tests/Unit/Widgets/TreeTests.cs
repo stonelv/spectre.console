@@ -125,4 +125,61 @@ public class TreeTests
                 string.Empty,
             });
     }
+
+    [Fact]
+    [Expectation("Render_Dotted")]
+    public Task Should_Render_Tree_With_Dotted_Guide_Correctly()
+    {
+        // Given
+        var console = new TestConsole();
+
+        var tree = new Tree(new Text("Root node")).Guide(TreeGuide.Dotted);
+
+        var child1 = new TreeNode(new Text("child1"));
+        var child1Grandchild1 = new TreeNode(new Text("grandchild1"));
+        var child1Grandchild2 = new TreeNode(new Text("grandchild2\nmultiline"));
+        child1.AddNodes(child1Grandchild1, child1Grandchild2);
+
+        var child2 = new TreeNode(new Text("child2"));
+        var child2Grandchild = new TreeNode(new Text("grandchild"));
+        var child2GreatGrandchild = new TreeNode(new Text("great-grandchild"));
+        child2Grandchild.AddNode(child2GreatGrandchild);
+        child2.AddNode(child2Grandchild);
+
+        tree.AddNodes(child1, child2);
+
+        // When
+        console.Write(tree);
+
+        // Then
+        return Verifier.Verify(console.Output);
+    }
+
+    [Fact]
+    [Expectation("Render_Dotted_DeepNesting")]
+    public Task Should_Render_Tree_With_Dotted_Guide_And_Deep_Nesting_Correctly()
+    {
+        // Given
+        var console = new TestConsole();
+
+        var tree = new Tree(new Text("Root")).Guide(TreeGuide.Dotted);
+
+        var level1 = new TreeNode(new Text("Level 1"));
+        var level2 = new TreeNode(new Text("Level 2"));
+        var level3 = new TreeNode(new Text("Level 3"));
+        var level4a = new TreeNode(new Text("Level 4a"));
+        var level4b = new TreeNode(new Text("Level 4b"));
+        var level4c = new TreeNode(new Text("Level 4c"));
+
+        level3.AddNodes(level4a, level4b, level4c);
+        level2.AddNode(level3);
+        level1.AddNode(level2);
+        tree.AddNode(level1);
+
+        // When
+        console.Write(tree);
+
+        // Then
+        return Verifier.Verify(console.Output);
+    }
 }

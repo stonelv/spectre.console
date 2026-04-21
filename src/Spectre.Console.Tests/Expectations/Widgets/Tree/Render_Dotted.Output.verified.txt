@@ -1,0 +1,8 @@
+Root node
+├┄┄ child1
+┆   ├┄┄ grandchild1
+┆   └┄┄ grandchild2
+┆       multiline
+└┄┄ child2
+    └┄┄ grandchild
+        └┄┄ great-grandchild

@@ -1,0 +1,7 @@
+Root
+└┄┄ Level 1
+    └┄┄ Level 2
+        └┄┄ Level 3
+            ├┄┄ Level 4a
+            ├┄┄ Level 4b
+            └┄┄ Level 4c
