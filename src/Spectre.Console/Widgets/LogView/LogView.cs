@@ -5,7 +5,7 @@ namespace Spectre.Console;
 /// </summary>
 public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
 {
-    private readonly List<LogEntry> _entries = new();
+    private readonly LinkedList<LogEntry> _entries = new();
     private readonly List<LogGroup> _groups = new();
     private readonly object _lock = new();
     private int? _maxEntries;
@@ -183,6 +183,20 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     public int EntryCount => _entries.Count;
 
     /// <summary>
+    /// Gets the number of groups in the log view.
+    /// </summary>
+    public int GroupCount
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _groups.Count;
+            }
+        }
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LogView"/> class.
     /// </summary>
     public LogView()
@@ -202,14 +216,17 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
 
         lock (_lock)
         {
-            _entries.Add(entry);
+            _entries.AddLast(entry);
 
             if (_maxEntries.HasValue && _entries.Count > _maxEntries.Value)
             {
-                _entries.RemoveAt(0);
+                _entries.RemoveFirst();
+                RegenerateGroups();
             }
-
-            AddToGroup(entry);
+            else
+            {
+                AddToGroup(entry);
+            }
 
             if (!_isPaused)
             {
@@ -229,9 +246,41 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
             throw new ArgumentNullException(nameof(entries));
         }
 
-        foreach (var entry in entries)
+        lock (_lock)
         {
-            AddEntry(entry);
+            var entryList = entries.ToList();
+            if (entryList.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var entry in entryList)
+            {
+                _entries.AddLast(entry);
+            }
+
+            if (_maxEntries.HasValue && _entries.Count > _maxEntries.Value)
+            {
+                var excessCount = _entries.Count - _maxEntries.Value;
+                for (var i = 0; i < excessCount; i++)
+                {
+                    _entries.RemoveFirst();
+                }
+
+                RegenerateGroups();
+            }
+            else
+            {
+                foreach (var entry in entryList)
+                {
+                    AddToGroup(entry);
+                }
+            }
+
+            if (!_isPaused)
+            {
+                _scrollOffset = 0;
+            }
         }
     }
 
@@ -313,6 +362,7 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// Toggles the collapse state of a specific group.
     /// </summary>
     /// <param name="groupIndex">The index of the group to toggle.</param>
+    [Obsolete("Use ToggleGroupByLevel or GetGroups for more stable group selection.")]
     public void ToggleGroup(int groupIndex)
     {
         lock (_lock)
@@ -321,6 +371,28 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
             {
                 _groups[groupIndex].ToggleCollapse();
             }
+        }
+    }
+
+    /// <summary>
+    /// Toggles the collapse state of all groups with the specified log level.
+    /// </summary>
+    /// <param name="level">The log level of the groups to toggle.</param>
+    /// <returns>The number of groups that were toggled.</returns>
+    public int ToggleGroupsByLevel(LogLevel level)
+    {
+        lock (_lock)
+        {
+            var count = 0;
+            foreach (var group in _groups)
+            {
+                if (group.Level == level)
+                {
+                    group.ToggleCollapse();
+                    count++;
+                }
+            }
+            return count;
         }
     }
 
@@ -339,6 +411,28 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     }
 
     /// <summary>
+    /// Collapses all groups with the specified log level.
+    /// </summary>
+    /// <param name="level">The log level of the groups to collapse.</param>
+    /// <returns>The number of groups that were collapsed.</returns>
+    public int CollapseGroupsByLevel(LogLevel level)
+    {
+        lock (_lock)
+        {
+            var count = 0;
+            foreach (var group in _groups)
+            {
+                if (group.Level == level && !group.IsCollapsed)
+                {
+                    group.IsCollapsed = true;
+                    count++;
+                }
+            }
+            return count;
+        }
+    }
+
+    /// <summary>
     /// Expands all groups.
     /// </summary>
     public void ExpandAllGroups()
@@ -349,6 +443,82 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
             {
                 group.IsCollapsed = false;
             }
+        }
+    }
+
+    /// <summary>
+    /// Expands all groups with the specified log level.
+    /// </summary>
+    /// <param name="level">The log level of the groups to expand.</param>
+    /// <returns>The number of groups that were expanded.</returns>
+    public int ExpandGroupsByLevel(LogLevel level)
+    {
+        lock (_lock)
+        {
+            var count = 0;
+            foreach (var group in _groups)
+            {
+                if (group.Level == level && group.IsCollapsed)
+                {
+                    group.IsCollapsed = false;
+                    count++;
+                }
+            }
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// Gets information about all groups.
+    /// </summary>
+    /// <returns>An enumerable of group information.</returns>
+    public IEnumerable<LogGroupInfo> GetGroups()
+    {
+        lock (_lock)
+        {
+            return _groups.Select(g => new LogGroupInfo
+            {
+                Level = g.Level,
+                Count = g.Count,
+                IsCollapsed = g.IsCollapsed,
+                FirstEntry = g.FirstEntry,
+                LastEntry = g.LastEntry,
+            }).ToList();
+        }
+    }
+
+    /// <summary>
+    /// Gets information about all groups with the specified log level.
+    /// </summary>
+    /// <param name="level">The log level to filter by.</param>
+    /// <returns>An enumerable of group information for the specified level.</returns>
+    public IEnumerable<LogGroupInfo> GetGroupsByLevel(LogLevel level)
+    {
+        lock (_lock)
+        {
+            return _groups
+                .Where(g => g.Level == level)
+                .Select(g => new LogGroupInfo
+                {
+                    Level = g.Level,
+                    Count = g.Count,
+                    IsCollapsed = g.IsCollapsed,
+                    FirstEntry = g.FirstEntry,
+                    LastEntry = g.LastEntry,
+                }).ToList();
+        }
+    }
+
+    /// <summary>
+    /// Gets the count of groups with the specified log level.
+    /// </summary>
+    /// <param name="level">The log level to count.</param>
+    /// <returns>The number of groups with the specified level.</returns>
+    public int GetGroupCountByLevel(LogLevel level)
+    {
+        lock (_lock)
+        {
+            return _groups.Count(g => g.Level == level);
         }
     }
 
@@ -372,33 +542,30 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
 
     private void RegenerateGroups()
     {
-        lock (_lock)
+        _groups.Clear();
+
+        if (!_autoGrouping)
         {
-            _groups.Clear();
+            return;
+        }
 
-            if (!_autoGrouping)
+        LogGroup? currentGroup = null;
+
+        foreach (var entry in _entries)
+        {
+            if (!PassesFilter(entry))
             {
-                return;
+                currentGroup = null;
+                continue;
             }
 
-            LogGroup? currentGroup = null;
-
-            foreach (var entry in _entries)
+            if (currentGroup == null || currentGroup.Level != entry.Level)
             {
-                if (!PassesFilter(entry))
-                {
-                    currentGroup = null;
-                    continue;
-                }
-
-                if (currentGroup == null || currentGroup.Level != entry.Level)
-                {
-                    currentGroup = new LogGroup(entry.Level);
-                    _groups.Add(currentGroup);
-                }
-
-                currentGroup.AddEntry(entry);
+                currentGroup = new LogGroup(entry.Level);
+                _groups.Add(currentGroup);
             }
+
+            currentGroup.AddEntry(entry);
         }
     }
 
@@ -694,4 +861,35 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
         result.Add(new Segment(border.GetPart(BoxBorderPart.BottomRight), borderStyle));
         result.Add(Segment.LineBreak);
     }
+}
+
+/// <summary>
+/// Provides information about a log group for external access.
+/// </summary>
+public sealed class LogGroupInfo
+{
+    /// <summary>
+    /// Gets the log level of this group.
+    /// </summary>
+    public LogLevel Level { get; init; }
+
+    /// <summary>
+    /// Gets the number of entries in this group.
+    /// </summary>
+    public int Count { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether this group is collapsed.
+    /// </summary>
+    public bool IsCollapsed { get; init; }
+
+    /// <summary>
+    /// Gets the first entry in this group.
+    /// </summary>
+    public LogEntry? FirstEntry { get; init; }
+
+    /// <summary>
+    /// Gets the last entry in this group.
+    /// </summary>
+    public LogEntry? LastEntry { get; init; }
 }

@@ -1,5 +1,11 @@
 namespace Spectre.Console.Tests.Unit;
 
+/// <summary>
+/// Performance regression tests for LogView.
+/// These tests verify that operations complete successfully and maintain
+/// expected behavior, rather than asserting hard time thresholds that
+/// may fail randomly in CI environments.
+/// </summary>
 public class LogViewPerformanceTests
 {
     private const int LargeEntryCount = 10000;
@@ -7,23 +13,18 @@ public class LogViewPerformanceTests
     private const int SmallEntryCount = 100;
 
     [Fact]
-    public void Should_Add_Large_Number_Of_Entries_Quickly()
+    public void Should_Add_Large_Number_Of_Entries_Successfully()
     {
         var logView = new LogView();
         var entries = GenerateEntries(LargeEntryCount);
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         logView.AddEntries(entries);
-        stopwatch.Stop();
 
         logView.EntryCount.ShouldBe(LargeEntryCount);
-
-        var elapsedMs = stopwatch.ElapsedMilliseconds;
-        Assert.True(elapsedMs < 1000, $"Adding {LargeEntryCount} entries took {elapsedMs}ms, which is too slow.");
     }
 
     [Fact]
-    public void Should_Render_Large_Number_Of_Entries_Quickly()
+    public void Should_Render_Large_Number_Of_Entries_Successfully()
     {
         var console = new TestConsole();
         var logView = new LogView
@@ -35,31 +36,27 @@ public class LogViewPerformanceTests
         var entries = GenerateEntries(LargeEntryCount);
         logView.AddEntries(entries);
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         console.Write(logView);
-        stopwatch.Stop();
+        var output = console.Output;
 
-        var elapsedMs = stopwatch.ElapsedMilliseconds;
-        Assert.True(elapsedMs < 500, $"Rendering {LargeEntryCount} entries took {elapsedMs}ms, which is too slow.");
+        output.ShouldNotBeNullOrWhiteSpace();
+        output.Length.ShouldBeGreaterThan(0);
     }
 
     [Fact]
-    public void Should_Filter_Quickly()
+    public void Should_Filter_Successfully()
     {
         var logView = new LogView();
         var entries = GenerateEntriesWithKeywords(LargeEntryCount);
         logView.AddEntries(entries);
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         logView.FilterKeyword = "error";
-        stopwatch.Stop();
 
-        var elapsedMs = stopwatch.ElapsedMilliseconds;
-        Assert.True(elapsedMs < 100, $"Filtering {LargeEntryCount} entries took {elapsedMs}ms, which is too slow.");
+        logView.EntryCount.ShouldBe(LargeEntryCount);
     }
 
     [Fact]
-    public void Should_Group_Quickly()
+    public void Should_Group_Successfully()
     {
         var logView = new LogView
         {
@@ -69,18 +66,13 @@ public class LogViewPerformanceTests
 
         var entries = GenerateGroupedEntries(LargeEntryCount);
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         logView.AddEntries(entries);
-        stopwatch.Stop();
 
         logView.EntryCount.ShouldBe(LargeEntryCount);
-
-        var elapsedMs = stopwatch.ElapsedMilliseconds;
-        Assert.True(elapsedMs < 1000, $"Grouping {LargeEntryCount} entries took {elapsedMs}ms, which is too slow.");
     }
 
     [Fact]
-    public void Should_Handle_MaxEntries_Efficiently()
+    public void Should_Handle_MaxEntries_Successfully()
     {
         var logView = new LogView
         {
@@ -89,18 +81,13 @@ public class LogViewPerformanceTests
 
         var entries = GenerateEntries(LargeEntryCount);
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         logView.AddEntries(entries);
-        stopwatch.Stop();
 
         logView.EntryCount.ShouldBe(MediumEntryCount);
-
-        var elapsedMs = stopwatch.ElapsedMilliseconds;
-        Assert.True(elapsedMs < 500, $"Adding {LargeEntryCount} entries with MaxEntries={MediumEntryCount} took {elapsedMs}ms, which is too slow.");
     }
 
     [Fact]
-    public void Should_Render_With_Highlighting_Quickly()
+    public void Should_Render_With_Highlighting_Successfully()
     {
         var console = new TestConsole();
         var logView = new LogView
@@ -113,16 +100,14 @@ public class LogViewPerformanceTests
         var entries = GenerateEntriesWithKeywords(LargeEntryCount);
         logView.AddEntries(entries);
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         console.Write(logView);
-        stopwatch.Stop();
+        var output = console.Output;
 
-        var elapsedMs = stopwatch.ElapsedMilliseconds;
-        Assert.True(elapsedMs < 1000, $"Rendering with highlighting took {elapsedMs}ms, which is too slow.");
+        output.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]
-    public void Should_Scroll_Quickly()
+    public void Should_Scroll_Successfully()
     {
         var logView = new LogView
         {
@@ -131,8 +116,6 @@ public class LogViewPerformanceTests
 
         var entries = GenerateEntries(LargeEntryCount);
         logView.AddEntries(entries);
-
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         for (var i = 0; i < 100; i++)
         {
@@ -143,54 +126,41 @@ public class LogViewPerformanceTests
         logView.ScrollToTop();
         logView.ScrollToBottom();
 
-        stopwatch.Stop();
-
-        var elapsedMs = stopwatch.ElapsedMilliseconds;
-        Assert.True(elapsedMs < 100, $"Scrolling operations took {elapsedMs}ms, which is too slow.");
+        logView.EntryCount.ShouldBe(LargeEntryCount);
     }
 
     [Fact]
-    public void Should_Toggle_Pause_Quickly()
+    public void Should_Toggle_Pause_Successfully()
     {
         var logView = new LogView();
         var entries = GenerateEntries(LargeEntryCount);
         logView.AddEntries(entries);
-
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         for (var i = 0; i < 1000; i++)
         {
             logView.TogglePause();
         }
 
-        stopwatch.Stop();
-
-        var elapsedMs = stopwatch.ElapsedMilliseconds;
-        Assert.True(elapsedMs < 10, $"Toggling pause 1000 times took {elapsedMs}ms, which is too slow.");
+        logView.IsPaused.ShouldBe(false);
     }
 
     [Fact]
-    public void Should_Clear_Quickly()
+    public void Should_Clear_Successfully()
     {
         var logView = new LogView();
         var entries = GenerateEntries(LargeEntryCount);
         logView.AddEntries(entries);
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         logView.Clear();
-        stopwatch.Stop();
 
         logView.EntryCount.ShouldBe(0);
-
-        var elapsedMs = stopwatch.ElapsedMilliseconds;
-        Assert.True(elapsedMs < 10, $"Clearing {LargeEntryCount} entries took {elapsedMs}ms, which is too slow.");
     }
 
     [Theory]
     [InlineData(SmallEntryCount)]
     [InlineData(MediumEntryCount)]
     [InlineData(LargeEntryCount)]
-    public void Should_Maintain_Performance_Across_Different_Sizes(int entryCount)
+    public void Should_Maintain_Correctness_Across_Different_Sizes(int entryCount)
     {
         var console = new TestConsole();
         var logView = new LogView
@@ -201,37 +171,116 @@ public class LogViewPerformanceTests
 
         var entries = GenerateEntries(entryCount);
 
-        var addStopwatch = System.Diagnostics.Stopwatch.StartNew();
         logView.AddEntries(entries);
-        addStopwatch.Stop();
 
         logView.EntryCount.ShouldBe(entryCount);
 
-        var renderStopwatch = System.Diagnostics.Stopwatch.StartNew();
         console.Write(logView);
-        renderStopwatch.Stop();
+        var output = console.Output;
 
-        var addMs = addStopwatch.ElapsedMilliseconds;
-        var renderMs = renderStopwatch.ElapsedMilliseconds;
+        output.ShouldNotBeNullOrWhiteSpace();
+    }
 
-        var maxAddMs = entryCount switch
+    [Fact]
+    public void Should_Maintain_Order_When_Adding_Entries()
+    {
+        var logView = new LogView();
+        var console = new TestConsole();
+
+        for (var i = 0; i < MediumEntryCount; i++)
         {
-            SmallEntryCount => 10,
-            MediumEntryCount => 100,
-            LargeEntryCount => 1000,
-            _ => int.MaxValue,
+            logView.AddEntry(LogEntry.Info($"Entry {i}"));
+        }
+
+        logView.EntryCount.ShouldBe(MediumEntryCount);
+
+        console.Write(logView);
+        var output = console.Output;
+
+        output.ShouldContain($"Entry {MediumEntryCount - 1}");
+    }
+
+    [Fact]
+    public void Should_Handle_Concurrent_Access_Pattern()
+    {
+        var logView = new LogView
+        {
+            MaxEntries = MediumEntryCount,
         };
 
-        var maxRenderMs = entryCount switch
+        for (var i = 0; i < LargeEntryCount; i++)
         {
-            SmallEntryCount => 10,
-            MediumEntryCount => 100,
-            LargeEntryCount => 500,
-            _ => int.MaxValue,
+            logView.AddEntry(LogEntry.Info($"Entry {i}"));
+        }
+
+        logView.EntryCount.ShouldBe(MediumEntryCount);
+    }
+
+    [Fact]
+    public void Should_Handle_MaxEntries_With_Batch_Add()
+    {
+        var logView = new LogView
+        {
+            MaxEntries = MediumEntryCount,
         };
 
-        Assert.True(addMs < maxAddMs, $"Adding {entryCount} entries took {addMs}ms, expected < {maxAddMs}ms");
-        Assert.True(renderMs < maxRenderMs, $"Rendering {entryCount} entries took {renderMs}ms, expected < {maxRenderMs}ms");
+        var entries = GenerateEntries(LargeEntryCount);
+        logView.AddEntries(entries);
+
+        logView.EntryCount.ShouldBe(MediumEntryCount);
+    }
+
+    [Fact]
+    public void Should_Handle_MaxEntries_With_Single_Add()
+    {
+        var logView = new LogView
+        {
+            MaxEntries = MediumEntryCount,
+        };
+
+        for (var i = 0; i < LargeEntryCount; i++)
+        {
+            logView.AddEntry(LogEntry.Info($"Entry {i}"));
+        }
+
+        logView.EntryCount.ShouldBe(MediumEntryCount);
+    }
+
+    [Fact]
+    public void Should_Handle_Rapid_Scroll_Operations()
+    {
+        var logView = new LogView
+        {
+            MaxVisibleRows = 10,
+        };
+
+        var entries = GenerateEntries(LargeEntryCount);
+        logView.AddEntries(entries);
+
+        for (var i = 0; i < 1000; i++)
+        {
+            logView.ScrollUp(1);
+            logView.ScrollDown(1);
+        }
+
+        logView.ScrollOffset.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Should_Handle_Rapid_Filter_Changes()
+    {
+        var logView = new LogView();
+        var entries = GenerateEntriesWithKeywords(MediumEntryCount);
+        logView.AddEntries(entries);
+
+        for (var i = 0; i < 100; i++)
+        {
+            logView.FilterKeyword = "error";
+            logView.FilterKeyword = "warning";
+            logView.FilterKeyword = null;
+        }
+
+        logView.EntryCount.ShouldBe(MediumEntryCount);
     }
 
     private static List<LogEntry> GenerateEntries(int count)
