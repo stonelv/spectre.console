@@ -6,6 +6,11 @@ namespace Spectre.Console;
 internal class LogGroup
 {
     /// <summary>
+    /// Gets the unique identifier of this group.
+    /// </summary>
+    public int Id { get; }
+
+    /// <summary>
     /// Gets the log level of this group.
     /// </summary>
     public LogLevel Level { get; }
@@ -38,9 +43,11 @@ internal class LogGroup
     /// <summary>
     /// Initializes a new instance of the <see cref="LogGroup"/> class.
     /// </summary>
+    /// <param name="id">The unique identifier of this group.</param>
     /// <param name="level">The log level for this group.</param>
-    public LogGroup(LogLevel level)
+    public LogGroup(int id, LogLevel level)
     {
+        Id = id;
         Level = level;
     }
 

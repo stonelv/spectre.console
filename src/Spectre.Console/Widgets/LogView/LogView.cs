@@ -8,6 +8,7 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     private readonly LinkedList<LogEntry> _entries = new();
     private readonly List<LogGroup> _groups = new();
     private readonly object _lock = new();
+    private int _nextGroupId = 1;
     private int? _maxEntries;
     private string? _filterKeyword;
     private bool _isPaused;
@@ -27,8 +28,33 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// </summary>
     public int? MaxEntries
     {
-        get => _maxEntries;
-        set => _maxEntries = value > 0 ? value : null;
+        get
+        {
+            lock (_lock)
+            {
+                return _maxEntries;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var newValue = value > 0 ? value : null;
+                if (newValue != _maxEntries)
+                {
+                    _maxEntries = newValue;
+                    if (_maxEntries.HasValue && _entries.Count > _maxEntries.Value)
+                    {
+                        var excessCount = _entries.Count - _maxEntries.Value;
+                        for (var i = 0; i < excessCount; i++)
+                        {
+                            _entries.RemoveFirst();
+                        }
+                        RegenerateGroupsUnlocked();
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -36,11 +62,23 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// </summary>
     public string? FilterKeyword
     {
-        get => _filterKeyword;
+        get
+        {
+            lock (_lock)
+            {
+                return _filterKeyword;
+            }
+        }
         set
         {
-            _filterKeyword = value;
-            RegenerateGroups();
+            lock (_lock)
+            {
+                if (_filterKeyword != value)
+                {
+                    _filterKeyword = value;
+                    RegenerateGroupsUnlocked();
+                }
+            }
         }
     }
 
@@ -49,8 +87,24 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// </summary>
     public bool IsPaused
     {
-        get => _isPaused;
-        set => _isPaused = value;
+        get
+        {
+            lock (_lock)
+            {
+                return _isPaused;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                _isPaused = value;
+                if (!_isPaused)
+                {
+                    _scrollOffset = 0;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -58,8 +112,20 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// </summary>
     public int ScrollOffset
     {
-        get => _scrollOffset;
-        set => _scrollOffset = Math.Max(0, value);
+        get
+        {
+            lock (_lock)
+            {
+                return _scrollOffset;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                _scrollOffset = Math.Max(0, value);
+            }
+        }
     }
 
     /// <summary>
@@ -67,11 +133,23 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// </summary>
     public bool AutoGrouping
     {
-        get => _autoGrouping;
+        get
+        {
+            lock (_lock)
+            {
+                return _autoGrouping;
+            }
+        }
         set
         {
-            _autoGrouping = value;
-            RegenerateGroups();
+            lock (_lock)
+            {
+                if (_autoGrouping != value)
+                {
+                    _autoGrouping = value;
+                    RegenerateGroupsUnlocked();
+                }
+            }
         }
     }
 
@@ -80,11 +158,24 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// </summary>
     public int GroupThreshold
     {
-        get => _groupThreshold;
+        get
+        {
+            lock (_lock)
+            {
+                return _groupThreshold;
+            }
+        }
         set
         {
-            _groupThreshold = Math.Max(2, value);
-            RegenerateGroups();
+            lock (_lock)
+            {
+                var newValue = Math.Max(2, value);
+                if (_groupThreshold != newValue)
+                {
+                    _groupThreshold = newValue;
+                    RegenerateGroupsUnlocked();
+                }
+            }
         }
     }
 
@@ -93,8 +184,20 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// </summary>
     public int? MaxVisibleRows
     {
-        get => _maxVisibleRows;
-        set => _maxVisibleRows = value > 0 ? value : null;
+        get
+        {
+            lock (_lock)
+            {
+                return _maxVisibleRows;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                _maxVisibleRows = value > 0 ? value : null;
+            }
+        }
     }
 
     /// <summary>
@@ -180,7 +283,16 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// <summary>
     /// Gets the number of entries in the log view.
     /// </summary>
-    public int EntryCount => _entries.Count;
+    public int EntryCount
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _entries.Count;
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the number of groups in the log view.
@@ -221,11 +333,11 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
             if (_maxEntries.HasValue && _entries.Count > _maxEntries.Value)
             {
                 _entries.RemoveFirst();
-                RegenerateGroups();
+                RegenerateGroupsUnlocked();
             }
             else
             {
-                AddToGroup(entry);
+                AddToGroupUnlocked(entry);
             }
 
             if (!_isPaused)
@@ -266,14 +378,13 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
                 {
                     _entries.RemoveFirst();
                 }
-
-                RegenerateGroups();
+                RegenerateGroupsUnlocked();
             }
             else
             {
                 foreach (var entry in entryList)
                 {
-                    AddToGroup(entry);
+                    AddToGroupUnlocked(entry);
                 }
             }
 
@@ -303,12 +414,15 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// <returns><c>true</c> if scrolling is now paused; otherwise, <c>false</c>.</returns>
     public bool TogglePause()
     {
-        _isPaused = !_isPaused;
-        if (!_isPaused)
+        lock (_lock)
         {
-            _scrollOffset = 0;
+            _isPaused = !_isPaused;
+            if (!_isPaused)
+            {
+                _scrollOffset = 0;
+            }
+            return _isPaused;
         }
-        return _isPaused;
     }
 
     /// <summary>
@@ -317,11 +431,14 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// <param name="lines">The number of lines to scroll up.</param>
     public void ScrollUp(int lines = 1)
     {
-        _scrollOffset += lines;
-        var maxOffset = GetTotalDisplayLines();
-        if (_scrollOffset > maxOffset)
+        lock (_lock)
         {
-            _scrollOffset = maxOffset;
+            _scrollOffset += lines;
+            var maxOffset = GetTotalDisplayLinesUnlocked();
+            if (_scrollOffset > maxOffset)
+            {
+                _scrollOffset = maxOffset;
+            }
         }
     }
 
@@ -331,7 +448,10 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// <param name="lines">The number of lines to scroll down.</param>
     public void ScrollDown(int lines = 1)
     {
-        _scrollOffset = Math.Max(0, _scrollOffset - lines);
+        lock (_lock)
+        {
+            _scrollOffset = Math.Max(0, _scrollOffset - lines);
+        }
     }
 
     /// <summary>
@@ -339,14 +459,17 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// </summary>
     public void ScrollToTop()
     {
-        var totalLines = GetTotalDisplayLines();
-        if (_maxVisibleRows.HasValue && totalLines > _maxVisibleRows.Value)
+        lock (_lock)
         {
-            _scrollOffset = totalLines - _maxVisibleRows.Value;
-        }
-        else
-        {
-            _scrollOffset = 0;
+            var totalLines = GetTotalDisplayLinesUnlocked();
+            if (_maxVisibleRows.HasValue && totalLines > _maxVisibleRows.Value)
+            {
+                _scrollOffset = totalLines - _maxVisibleRows.Value;
+            }
+            else
+            {
+                _scrollOffset = 0;
+            }
         }
     }
 
@@ -355,14 +478,17 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     /// </summary>
     public void ScrollToBottom()
     {
-        _scrollOffset = 0;
+        lock (_lock)
+        {
+            _scrollOffset = 0;
+        }
     }
 
     /// <summary>
     /// Toggles the collapse state of a specific group.
     /// </summary>
     /// <param name="groupIndex">The index of the group to toggle.</param>
-    [Obsolete("Use ToggleGroupByLevel or GetGroups for more stable group selection.")]
+    [Obsolete("Use ToggleGroupById or GetGroups for more stable group selection.")]
     public void ToggleGroup(int groupIndex)
     {
         lock (_lock)
@@ -371,6 +497,25 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
             {
                 _groups[groupIndex].ToggleCollapse();
             }
+        }
+    }
+
+    /// <summary>
+    /// Toggles the collapse state of a group by its ID.
+    /// </summary>
+    /// <param name="groupId">The ID of the group to toggle.</param>
+    /// <returns><c>true</c> if the group was found and toggled; otherwise, <c>false</c>.</returns>
+    public bool ToggleGroupById(int groupId)
+    {
+        lock (_lock)
+        {
+            var group = _groups.FirstOrDefault(g => g.Id == groupId);
+            if (group != null)
+            {
+                group.ToggleCollapse();
+                return true;
+            }
+            return false;
         }
     }
 
@@ -411,6 +556,25 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     }
 
     /// <summary>
+    /// Collapses a group by its ID.
+    /// </summary>
+    /// <param name="groupId">The ID of the group to collapse.</param>
+    /// <returns><c>true</c> if the group was found and collapsed; otherwise, <c>false</c>.</returns>
+    public bool CollapseGroupById(int groupId)
+    {
+        lock (_lock)
+        {
+            var group = _groups.FirstOrDefault(g => g.Id == groupId);
+            if (group != null && !group.IsCollapsed)
+            {
+                group.IsCollapsed = true;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Collapses all groups with the specified log level.
     /// </summary>
     /// <param name="level">The log level of the groups to collapse.</param>
@@ -447,6 +611,25 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     }
 
     /// <summary>
+    /// Expands a group by its ID.
+    /// </summary>
+    /// <param name="groupId">The ID of the group to expand.</param>
+    /// <returns><c>true</c> if the group was found and expanded; otherwise, <c>false</c>.</returns>
+    public bool ExpandGroupById(int groupId)
+    {
+        lock (_lock)
+        {
+            var group = _groups.FirstOrDefault(g => g.Id == groupId);
+            if (group != null && group.IsCollapsed)
+            {
+                group.IsCollapsed = false;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Expands all groups with the specified log level.
     /// </summary>
     /// <param name="level">The log level of the groups to expand.</param>
@@ -478,6 +661,7 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
         {
             return _groups.Select(g => new LogGroupInfo
             {
+                Id = g.Id,
                 Level = g.Level,
                 Count = g.Count,
                 IsCollapsed = g.IsCollapsed,
@@ -500,6 +684,7 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
                 .Where(g => g.Level == level)
                 .Select(g => new LogGroupInfo
                 {
+                    Id = g.Id,
                     Level = g.Level,
                     Count = g.Count,
                     IsCollapsed = g.IsCollapsed,
@@ -522,25 +707,51 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
         }
     }
 
-    private void AddToGroup(LogEntry entry)
+    /// <summary>
+    /// Gets information about a specific group by its ID.
+    /// </summary>
+    /// <param name="groupId">The ID of the group to get information for.</param>
+    /// <returns>The group information, or <c>null</c> if no group with the specified ID exists.</returns>
+    public LogGroupInfo? GetGroupById(int groupId)
+    {
+        lock (_lock)
+        {
+            var group = _groups.FirstOrDefault(g => g.Id == groupId);
+            if (group != null)
+            {
+                return new LogGroupInfo
+                {
+                    Id = group.Id,
+                    Level = group.Level,
+                    Count = group.Count,
+                    IsCollapsed = group.IsCollapsed,
+                    FirstEntry = group.FirstEntry,
+                    LastEntry = group.LastEntry,
+                };
+            }
+            return null;
+        }
+    }
+
+    private void AddToGroupUnlocked(LogEntry entry)
     {
         if (!_autoGrouping)
         {
             return;
         }
 
-        if (PassesFilter(entry))
+        if (PassesFilterUnlocked(entry))
         {
             if (_groups.Count == 0 || _groups[_groups.Count - 1].Level != entry.Level)
             {
-                _groups.Add(new LogGroup(entry.Level));
+                _groups.Add(new LogGroup(GenerateGroupIdUnlocked(), entry.Level));
             }
 
             _groups[_groups.Count - 1].AddEntry(entry);
         }
     }
 
-    private void RegenerateGroups()
+    private void RegenerateGroupsUnlocked()
     {
         _groups.Clear();
 
@@ -553,7 +764,7 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
 
         foreach (var entry in _entries)
         {
-            if (!PassesFilter(entry))
+            if (!PassesFilterUnlocked(entry))
             {
                 currentGroup = null;
                 continue;
@@ -561,7 +772,7 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
 
             if (currentGroup == null || currentGroup.Level != entry.Level)
             {
-                currentGroup = new LogGroup(entry.Level);
+                currentGroup = new LogGroup(GenerateGroupIdUnlocked(), entry.Level);
                 _groups.Add(currentGroup);
             }
 
@@ -569,7 +780,12 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
         }
     }
 
-    private bool PassesFilter(LogEntry entry)
+    private int GenerateGroupIdUnlocked()
+    {
+        return _nextGroupId++;
+    }
+
+    private bool PassesFilterUnlocked(LogEntry entry)
     {
         if (string.IsNullOrEmpty(_filterKeyword))
         {
@@ -580,30 +796,27 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
                (entry.Category != null && entry.Category.Contains(_filterKeyword, StringComparison.OrdinalIgnoreCase));
     }
 
-    private int GetTotalDisplayLines()
+    private int GetTotalDisplayLinesUnlocked()
     {
-        lock (_lock)
+        if (!_autoGrouping)
         {
-            if (!_autoGrouping)
-            {
-                return _entries.Count(e => PassesFilter(e));
-            }
-
-            var totalLines = 0;
-            foreach (var group in _groups)
-            {
-                if (group.Count < _groupThreshold || !group.IsCollapsed)
-                {
-                    totalLines += group.Count;
-                }
-                else
-                {
-                    totalLines += 1;
-                }
-            }
-
-            return totalLines;
+            return _entries.Count(e => PassesFilterUnlocked(e));
         }
+
+        var totalLines = 0;
+        foreach (var group in _groups)
+        {
+            if (group.Count < _groupThreshold || !group.IsCollapsed)
+            {
+                totalLines += group.Count;
+            }
+            else
+            {
+                totalLines += 1;
+            }
+        }
+
+        return totalLines;
     }
 
     /// <inheritdoc/>
@@ -626,14 +839,20 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
         var result = new List<Segment>();
         var borderStyle = BorderStyle ?? Style.Plain;
 
+        List<List<Segment>> visibleLines;
+        int? maxVisibleRows;
+
+        lock (_lock)
+        {
+            var lines = GetRenderLinesUnlocked(innerWidth, useCompactView, options);
+            maxVisibleRows = _maxVisibleRows ?? Height ?? options.Height;
+            visibleLines = GetVisibleLinesUnlocked(lines, maxVisibleRows);
+        }
+
         if (showBorder)
         {
             AddTopBorder(result, border, borderStyle, maxWidth);
         }
-
-        var lines = GetRenderLines(innerWidth, useCompactView, options);
-        var maxHeight = _maxVisibleRows ?? Height ?? options.Height;
-        var visibleLines = GetVisibleLines(lines, maxHeight);
 
         foreach (var line in visibleLines)
         {
@@ -666,37 +885,34 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
         return result;
     }
 
-    private List<List<Segment>> GetRenderLines(int innerWidth, bool useCompactView, RenderOptions options)
+    private List<List<Segment>> GetRenderLinesUnlocked(int innerWidth, bool useCompactView, RenderOptions options)
     {
         var lines = new List<List<Segment>>();
 
-        lock (_lock)
+        if (!_autoGrouping)
         {
-            if (!_autoGrouping)
+            foreach (var entry in _entries)
             {
-                foreach (var entry in _entries)
+                if (PassesFilterUnlocked(entry))
                 {
-                    if (PassesFilter(entry))
+                    lines.Add(RenderEntry(entry, innerWidth, useCompactView));
+                }
+            }
+        }
+        else
+        {
+            foreach (var group in _groups)
+            {
+                if (group.Count < _groupThreshold || !group.IsCollapsed)
+                {
+                    foreach (var entry in group.Entries)
                     {
                         lines.Add(RenderEntry(entry, innerWidth, useCompactView));
                     }
                 }
-            }
-            else
-            {
-                foreach (var group in _groups)
+                else
                 {
-                    if (group.Count < _groupThreshold || !group.IsCollapsed)
-                    {
-                        foreach (var entry in group.Entries)
-                        {
-                            lines.Add(RenderEntry(entry, innerWidth, useCompactView));
-                        }
-                    }
-                    else
-                    {
-                        lines.Add(RenderCollapsedGroup(group, innerWidth));
-                    }
+                    lines.Add(RenderCollapsedGroup(group, innerWidth));
                 }
             }
         }
@@ -704,7 +920,7 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
         return lines;
     }
 
-    private List<List<Segment>> GetVisibleLines(List<List<Segment>> allLines, int? maxHeight)
+    private List<List<Segment>> GetVisibleLinesUnlocked(List<List<Segment>> allLines, int? maxHeight)
     {
         if (allLines.Count == 0)
         {
@@ -771,8 +987,14 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
     private List<Segment> RenderMessageWithHighlight(string message, Style defaultStyle)
     {
         var segments = new List<Segment>();
+        string? filterKeyword;
 
-        if (string.IsNullOrEmpty(_filterKeyword))
+        lock (_lock)
+        {
+            filterKeyword = _filterKeyword;
+        }
+
+        if (string.IsNullOrEmpty(filterKeyword))
         {
             segments.Add(new Segment(message, defaultStyle));
             return segments;
@@ -783,7 +1005,7 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
 
         while (!string.IsNullOrEmpty(remaining))
         {
-            var index = remaining.IndexOf(_filterKeyword, comparison);
+            var index = remaining.IndexOf(filterKeyword, comparison);
             if (index < 0)
             {
                 segments.Add(new Segment(remaining, defaultStyle));
@@ -795,8 +1017,8 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
                 segments.Add(new Segment(remaining[..index], defaultStyle));
             }
 
-            segments.Add(new Segment(remaining.Substring(index, _filterKeyword.Length), Styles.HighlightStyle));
-            remaining = remaining[(index + _filterKeyword.Length)..];
+            segments.Add(new Segment(remaining.Substring(index, filterKeyword.Length), Styles.HighlightStyle));
+            remaining = remaining[(index + filterKeyword.Length)..];
         }
 
         return segments;
@@ -868,6 +1090,11 @@ public sealed class LogView : Renderable, IHasBoxBorder, IHasBorder, IExpandable
 /// </summary>
 public sealed class LogGroupInfo
 {
+    /// <summary>
+    /// Gets the unique identifier of this group.
+    /// </summary>
+    public int Id { get; init; }
+
     /// <summary>
     /// Gets the log level of this group.
     /// </summary>
