@@ -72,6 +72,17 @@ public static class FormPromptExtensions
         return form;
     }
 
+    public static FormPrompt SubmitText(this FormPrompt form, string text)
+    {
+        if (form is null)
+        {
+            throw new ArgumentNullException(nameof(form));
+        }
+
+        form.SubmitText = text;
+        return form;
+    }
+
     public static FormResult Prompt(this IAnsiConsole console, FormPrompt form)
     {
         if (console is null)
@@ -353,17 +364,6 @@ public static class SelectionFormFieldExtensions
         return field;
     }
 
-    public static SelectionFormField PageSize(this SelectionFormField field, int pageSize)
-    {
-        if (field is null)
-        {
-            throw new ArgumentNullException(nameof(field));
-        }
-
-        field.PageSize = pageSize;
-        return field;
-    }
-
     public static SelectionFormField WrapAround(this SelectionFormField field, bool wrap = true)
     {
         if (field is null)
@@ -383,17 +383,6 @@ public static class SelectionFormFieldExtensions
         }
 
         field.DefaultIndex = index;
-        return field;
-    }
-
-    public static SelectionFormField MoreChoicesText(this SelectionFormField field, string text)
-    {
-        if (field is null)
-        {
-            throw new ArgumentNullException(nameof(field));
-        }
-
-        field.MoreChoicesText = text;
         return field;
     }
 
@@ -478,17 +467,6 @@ public static class MultiSelectionFormFieldExtensions
         return field;
     }
 
-    public static MultiSelectionFormField PageSize(this MultiSelectionFormField field, int pageSize)
-    {
-        if (field is null)
-        {
-            throw new ArgumentNullException(nameof(field));
-        }
-
-        field.PageSize = pageSize;
-        return field;
-    }
-
     public static MultiSelectionFormField WrapAround(this MultiSelectionFormField field, bool wrap = true)
     {
         if (field is null)
@@ -530,17 +508,6 @@ public static class MultiSelectionFormFieldExtensions
         }
 
         field.DefaultIndexes = new List<int>(indexes);
-        return field;
-    }
-
-    public static MultiSelectionFormField MoreChoicesText(this MultiSelectionFormField field, string text)
-    {
-        if (field is null)
-        {
-            throw new ArgumentNullException(nameof(field));
-        }
-
-        field.MoreChoicesText = text;
         return field;
     }
 

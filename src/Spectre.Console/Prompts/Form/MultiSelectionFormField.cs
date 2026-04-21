@@ -8,13 +8,11 @@ public sealed class MultiSelectionFormField : FormField<List<string>>
 
     public IReadOnlyList<SelectionChoice> Choices => _choices;
 
-    public int PageSize { get; set; } = 10;
     public bool WrapAround { get; set; }
     public bool Required { get; set; } = true;
     public int? MinSelections { get; set; }
     public int? MaxSelections { get; set; }
     public List<int>? DefaultIndexes { get; set; }
-    public string? MoreChoicesText { get; set; }
     public string? InstructionsText { get; set; }
 
     public MultiSelectionFormField(string id, string label)

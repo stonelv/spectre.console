@@ -403,7 +403,7 @@ public sealed class FormPrompt : IPrompt<FormResult>
             var field = _fields[i];
             var state = _fieldStates[field.Id];
             var isFocused = i == currentFieldIndex;
-            var style = isFocused ? focusStyle : Style.Plain;
+            var style = isFocused ? focusStyle : (field.LabelStyle ?? Style.Plain);
 
             var labelPrefix = isFocused ? "> " : "  ";
             var labelBuilder = new StringBuilder();
@@ -414,7 +414,7 @@ public sealed class FormPrompt : IPrompt<FormResult>
                 labelBuilder.Append("[red]*[/] ");
             }
 
-            labelBuilder.Append(field.Label);
+            labelBuilder.Append(field.Label.EscapeMarkup());
             labelBuilder.Append(": ");
 
             var isTextOrPassword = field is TextFormField || field is PasswordFormField;
@@ -436,6 +436,12 @@ public sealed class FormPrompt : IPrompt<FormResult>
                 var errorMessage = state.ValidationResult.Message ?? "[red]Invalid input[/]";
                 list.Add(new Markup("  " + errorMessage, errorStyle));
             }
+        }
+
+        if (!string.IsNullOrEmpty(SubmitText))
+        {
+            list.Add(Text.Empty);
+            list.Add(new Markup("  " + SubmitText));
         }
 
         if (!string.IsNullOrEmpty(InstructionsText))
@@ -537,22 +543,47 @@ public sealed class FormPrompt : IPrompt<FormResult>
         }
         else
         {
-            var text = state.InputText.EscapeMarkup();
+            var escapedText = state.InputText.EscapeMarkup();
             if (isFocused)
             {
-                if (state.CursorPosition < text.Length)
+                var escapedCursorPosition = CalculateEscapedCursorPosition(state.InputText, state.CursorPosition);
+                var cursorMarkup = "[underline]_[/]";
+                if (escapedCursorPosition < escapedText.Length)
                 {
-                    text = text.Insert(state.CursorPosition, "[underline]_[/]");
+                    escapedText = escapedText.Insert(escapedCursorPosition, cursorMarkup);
                 }
                 else
                 {
-                    text += "[underline]_[/]";
+                    escapedText += cursorMarkup;
                 }
             }
-            builder.Append(text);
+            builder.Append(escapedText);
         }
 
         return builder.ToString();
+    }
+
+    private static int CalculateEscapedCursorPosition(string inputText, int cursorPosition)
+    {
+        if (cursorPosition <= 0)
+        {
+            return 0;
+        }
+
+        var escapedPosition = 0;
+        for (var i = 0; i < cursorPosition && i < inputText.Length; i++)
+        {
+            if (inputText[i] == '[' || inputText[i] == ']')
+            {
+                escapedPosition += 2;
+            }
+            else
+            {
+                escapedPosition += 1;
+            }
+        }
+
+        return escapedPosition;
     }
 }
 
