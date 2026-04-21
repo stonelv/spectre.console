@@ -24,4 +24,9 @@ public abstract partial class TreeGuide
     /// Gets a <see cref="BoldLineTreeGuide"/> instance.
     /// </summary>
     public static TreeGuide BoldLine { get; } = new BoldLineTreeGuide();
+
+    /// <summary>
+    /// Gets a <see cref="DottedTreeGuide"/> instance.
+    /// </summary>
+    public static TreeGuide Dotted { get; } = new DottedTreeGuide();
 }
