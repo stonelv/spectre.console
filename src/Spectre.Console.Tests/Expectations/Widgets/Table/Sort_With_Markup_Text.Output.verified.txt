@@ -1,0 +1,7 @@
+┌───────┬─────────┐
+│ Name  │ Status  │
+├───────┼─────────┤
+│ Apple │ Pending │
+│ Mango │ Error   │
+│ Zebra │ Done    │
+└───────┴─────────┘
