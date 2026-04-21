@@ -475,4 +475,122 @@ public static class TableExtensions
         table.Caption = caption;
         return table;
     }
+
+    /// <summary>
+    /// Sorts the table by the specified column.
+    /// </summary>
+    /// <param name="table">The table to sort.</param>
+    /// <param name="columnIndex">The index of the column to sort by.</param>
+    /// <param name="descending">Whether to sort in descending order.</param>
+    /// <returns>The same instance so that multiple calls can be chained.</returns>
+    public static Table SortBy(this Table table, int columnIndex, bool descending = false)
+    {
+        if (table is null)
+        {
+            throw new ArgumentNullException(nameof(table));
+        }
+
+        table.SetSort(columnIndex, descending);
+        return table;
+    }
+
+    /// <summary>
+    /// Sorts the table by the specified column.
+    /// </summary>
+    /// <param name="table">The table to sort.</param>
+    /// <param name="columnName">The name of the column to sort by.</param>
+    /// <param name="descending">Whether to sort in descending order.</param>
+    /// <returns>The same instance so that multiple calls can be chained.</returns>
+    public static Table SortBy(this Table table, string columnName, bool descending = false)
+    {
+        if (table is null)
+        {
+            throw new ArgumentNullException(nameof(table));
+        }
+
+        if (columnName is null)
+        {
+            throw new ArgumentNullException(nameof(columnName));
+        }
+
+        table.SetSort(columnName, descending);
+        return table;
+    }
+
+    /// <summary>
+    /// Sorts the table by the specified column in descending order.
+    /// </summary>
+    /// <param name="table">The table to sort.</param>
+    /// <param name="columnIndex">The index of the column to sort by.</param>
+    /// <returns>The same instance so that multiple calls can be chained.</returns>
+    public static Table SortByDescending(this Table table, int columnIndex)
+    {
+        if (table is null)
+        {
+            throw new ArgumentNullException(nameof(table));
+        }
+
+        table.SetSort(columnIndex, descending: true);
+        return table;
+    }
+
+    /// <summary>
+    /// Sorts the table by the specified column in descending order.
+    /// </summary>
+    /// <param name="table">The table to sort.</param>
+    /// <param name="columnName">The name of the column to sort by.</param>
+    /// <returns>The same instance so that multiple calls can be chained.</returns>
+    public static Table SortByDescending(this Table table, string columnName)
+    {
+        if (table is null)
+        {
+            throw new ArgumentNullException(nameof(table));
+        }
+
+        if (columnName is null)
+        {
+            throw new ArgumentNullException(nameof(columnName));
+        }
+
+        table.SetSort(columnName, descending: true);
+        return table;
+    }
+
+    /// <summary>
+    /// Sorts the table using a custom comparer.
+    /// </summary>
+    /// <param name="table">The table to sort.</param>
+    /// <param name="comparer">The comparer to use for sorting.</param>
+    /// <returns>The same instance so that multiple calls can be chained.</returns>
+    public static Table SortBy(this Table table, IComparer<TableRow> comparer)
+    {
+        if (table is null)
+        {
+            throw new ArgumentNullException(nameof(table));
+        }
+
+        if (comparer is null)
+        {
+            throw new ArgumentNullException(nameof(comparer));
+        }
+
+        table.SetSort(comparer);
+        return table;
+    }
+
+    /// <summary>
+    /// Clears any existing sorting configuration on the table.
+    /// </summary>
+    /// <param name="table">The table to clear sorting from.</param>
+    /// <returns>The same instance so that multiple calls can be chained.</returns>
+    public static Table ClearSort(this Table table)
+    {
+        if (table is null)
+        {
+            throw new ArgumentNullException(nameof(table));
+        }
+
+        table.ClearSort();
+        return table;
+    }
 }

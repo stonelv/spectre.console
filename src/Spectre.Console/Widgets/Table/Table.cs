@@ -1,3 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
+using System.Text;
+using Spectre.Console.Rendering;
+
 namespace Spectre.Console;
 
 /// <summary>
@@ -6,6 +11,9 @@ namespace Spectre.Console;
 public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
 {
     private readonly List<TableColumn> _columns;
+    private int? _sortColumnIndex;
+    private bool _sortDescending;
+    private IComparer<TableRow>? _sortComparer;
 
     /// <summary>
     /// Gets the table columns.
@@ -16,6 +24,10 @@ public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
     /// Gets the table rows.
     /// </summary>
     public TableRowCollection Rows { get; }
+
+    internal int? SortColumnIndex => _sortColumnIndex;
+    internal bool SortDescending => _sortDescending;
+    internal IComparer<TableRow>? SortComparer => _sortComparer;
 
     /// <inheritdoc/>
     public TableBorder Border { get; set; } = TableBorder.Square;
@@ -149,25 +161,224 @@ public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
             columnWidths);
     }
 
+    internal void SetSort(int columnIndex, bool descending = false)
+    {
+        if (columnIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(columnIndex), "Column index cannot be negative.");
+        }
+
+        _sortColumnIndex = columnIndex;
+        _sortDescending = descending;
+        _sortComparer = null;
+    }
+
+    internal void SetSort(string columnName, bool descending = false)
+    {
+        if (columnName is null)
+        {
+            throw new ArgumentNullException(nameof(columnName));
+        }
+
+        var index = FindColumnIndex(columnName);
+        if (index == -1)
+        {
+            throw new ArgumentException($"Column '{columnName}' not found in the table.", nameof(columnName));
+        }
+
+        SetSort(index, descending);
+    }
+
+    internal void SetSort(IComparer<TableRow> comparer)
+    {
+        _sortComparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+        _sortColumnIndex = null;
+        _sortDescending = false;
+    }
+
+    internal void ClearSort()
+    {
+        _sortColumnIndex = null;
+        _sortDescending = false;
+        _sortComparer = null;
+    }
+
+    private int FindColumnIndex(string columnName)
+    {
+        for (int i = 0; i < _columns.Count; i++)
+        {
+            var columnText = GetRenderableText(_columns[i].Header);
+            if (columnText.Equals(columnName, StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string GetRenderableText(IRenderable? renderable)
+    {
+        if (renderable == null)
+        {
+            return string.Empty;
+        }
+
+        if (renderable is Text text)
+        {
+            return GetTextFromTextWidget(text);
+        }
+
+        if (renderable is Markup markup)
+        {
+            return GetTextFromMarkupWidget(markup);
+        }
+
+        return renderable.ToString() ?? string.Empty;
+    }
+
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075:UnrecognizedReflectionPattern",
+        Justification = "Text and Markup types are well-known and preserved in the library.")]
+    private static string GetTextFromTextWidget(Text text)
+    {
+        var paragraphField = typeof(Text).GetField("_paragraph", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (paragraphField == null)
+        {
+            return text.ToString() ?? string.Empty;
+        }
+
+        var paragraph = paragraphField.GetValue(text);
+        return ExtractTextFromParagraph(paragraph);
+    }
+
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075:UnrecognizedReflectionPattern",
+        Justification = "Text and Markup types are well-known and preserved in the library.")]
+    private static string GetTextFromMarkupWidget(Markup markup)
+    {
+        var paragraphField = typeof(Markup).GetField("_paragraph", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (paragraphField == null)
+        {
+            return markup.ToString() ?? string.Empty;
+        }
+
+        var paragraph = paragraphField.GetValue(markup);
+        return ExtractTextFromParagraph(paragraph);
+    }
+
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075:UnrecognizedReflectionPattern",
+        Justification = "Paragraph and Segment types are well-known and preserved in the library.")]
+    private static string ExtractTextFromParagraph(object? paragraph)
+    {
+        if (paragraph == null)
+        {
+            return string.Empty;
+        }
+
+        var linesField = typeof(Paragraph).GetField("_lines", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (linesField == null)
+        {
+            return paragraph.ToString() ?? string.Empty;
+        }
+
+        var lines = linesField.GetValue(paragraph) as List<SegmentLine>;
+        if (lines == null)
+        {
+            return string.Empty;
+        }
+
+        var textBuilder = new StringBuilder();
+        foreach (var line in lines)
+        {
+            if (line == null) continue;
+
+            foreach (var segment in line)
+            {
+                if (segment != null && segment.Text != null)
+                {
+                    textBuilder.Append(segment.Text);
+                }
+            }
+        }
+
+        return textBuilder.ToString();
+    }
+
     private List<TableRow> GetRenderableRows()
     {
         var rows = new List<TableRow>();
 
-        // Show headers?
         if (ShowHeaders)
         {
             rows.Add(TableRow.Header(_columns.Select(c => c.Header)));
         }
 
-        // Add rows
-        rows.AddRange(Rows);
+        var dataRows = Rows.ToList();
 
-        // Show footers?
+        if (_sortComparer != null)
+        {
+            dataRows.Sort(_sortComparer);
+        }
+        else if (_sortColumnIndex.HasValue)
+        {
+            var columnIndex = _sortColumnIndex.Value;
+            if (columnIndex < _columns.Count)
+            {
+                dataRows = _sortDescending
+                    ? dataRows.OrderByDescending(row => GetSortKey(row, columnIndex)).ToList()
+                    : dataRows.OrderBy(row => GetSortKey(row, columnIndex)).ToList();
+            }
+        }
+
+        rows.AddRange(dataRows);
+
         if (ShowFooters && _columns.Any(c => c.Footer != null))
         {
             rows.Add(TableRow.Footer(_columns.Select(c => c.Footer ?? Text.Empty)));
         }
 
         return rows;
+    }
+
+    private static object GetSortKey(TableRow row, int columnIndex)
+    {
+        if (columnIndex >= row.Count)
+        {
+            return string.Empty;
+        }
+
+        var cell = row[columnIndex];
+        var text = GetRenderableText(cell);
+
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        if (int.TryParse(text, out var intValue))
+        {
+            return intValue;
+        }
+
+        if (long.TryParse(text, out var longValue))
+        {
+            return longValue;
+        }
+
+        if (decimal.TryParse(text, out var decimalValue))
+        {
+            return decimalValue;
+        }
+
+        if (DateTime.TryParse(text, out var dateValue))
+        {
+            return dateValue;
+        }
+
+        if (DateTimeOffset.TryParse(text, out var dateOffsetValue))
+        {
+            return dateOffsetValue;
+        }
+
+        return text;
     }
 }
