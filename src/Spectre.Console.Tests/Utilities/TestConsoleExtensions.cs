@@ -21,6 +21,21 @@ public static class TestConsoleExtensions
             .Select(line => line.TrimEnd()));
     }
 
+    public static string WriteNormalizedException(this TestConsole console, Exception ex, ExceptionSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(console.Output))
+        {
+            throw new InvalidOperationException("Output buffer is not empty.");
+        }
+
+        console.WriteException(ex, settings);
+
+        return string.Join("\n", NormalizeStackTrace(console.Output)
+            .NormalizeLineEndings()
+            .Split(['\n'])
+            .Select(line => line.TrimEnd()));
+    }
+
     public static string NormalizeStackTrace(string text)
     {
         // First normalize line numbers

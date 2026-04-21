@@ -43,6 +43,27 @@ public static class TestExceptions
         MethodThatThrows(0);
         return ("key", new List<T>());
     }
+
+    public static Exception CreateDeeplyNestedException(int depth)
+    {
+        if (depth <= 0)
+        {
+            return new InvalidOperationException("Innermost exception");
+        }
+
+        return new InvalidOperationException($"Level {depth}", CreateDeeplyNestedException(depth - 1));
+    }
+
+    public static Exception CreateCyclicReferenceException()
+    {
+        var inner = new InvalidOperationException("Inner exception");
+        var outer = new InvalidOperationException("Outer exception", inner);
+        
+        var field = typeof(Exception).GetField("_innerException", BindingFlags.Instance | BindingFlags.NonPublic);
+        field?.SetValue(inner, outer);
+
+        return outer;
+    }
 }
 
 #pragma warning disable CS9113 // Parameter is unread.

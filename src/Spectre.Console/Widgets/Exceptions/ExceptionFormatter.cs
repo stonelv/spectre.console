@@ -16,17 +16,17 @@ internal static class ExceptionFormatter
             throw new ArgumentNullException(nameof(exception));
         }
 
-        return GetException(exception, settings);
+        return GetException(exception, settings, new HashSet<Exception>(), depth: 0);
     }
 
-    private static IRenderable GetException(Exception exception, ExceptionSettings settings)
+    private static IRenderable GetException(Exception exception, ExceptionSettings settings, HashSet<Exception> visitedExceptions, int depth)
     {
         if (exception is null)
         {
             throw new ArgumentNullException(nameof(exception));
         }
 
-        return new Rows(GetMessage(exception, settings), GetStackFrames(exception, settings)).Expand();
+        return new Rows(GetMessage(exception, settings), GetStackFrames(exception, settings, visitedExceptions, depth)).Expand();
     }
 
     private static Markup GetMessage(Exception ex, ExceptionSettings settings)
@@ -41,7 +41,7 @@ internal static class ExceptionFormatter
         return new Markup($"{type}: {message}");
     }
 
-    private static Grid GetStackFrames(Exception ex, ExceptionSettings settings)
+    private static Grid GetStackFrames(Exception ex, ExceptionSettings settings, HashSet<Exception> visitedExceptions, int depth)
     {
         var styles = settings.Style;
 
@@ -50,11 +50,22 @@ internal static class ExceptionFormatter
         grid.AddColumn(new GridColumn().PadLeft(1).PadRight(0));
 
         // Inner
-        if (ex.InnerException != null)
+        var showInnerExceptions = settings.ShowInnerExceptions && (settings.Format & ExceptionFormats.NoInnerExceptions) == 0;
+        if (ex.InnerException != null && showInnerExceptions)
         {
-            grid.AddRow(
-                Text.Empty,
-                GetException(ex.InnerException, settings));
+            // Check for circular reference
+            if (!visitedExceptions.Contains(ex.InnerException))
+            {
+                // Check depth limit
+                var nextDepth = depth + 1;
+                if (!settings.MaxInnerExceptionDepth.HasValue || nextDepth <= settings.MaxInnerExceptionDepth)
+                {
+                    visitedExceptions.Add(ex.InnerException);
+                    grid.AddRow(
+                        Text.Empty,
+                        GetException(ex.InnerException, settings, visitedExceptions, nextDepth));
+                }
+            }
         }
 
         // Stack frames

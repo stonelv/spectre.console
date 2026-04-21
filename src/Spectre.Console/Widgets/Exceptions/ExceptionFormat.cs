@@ -40,4 +40,13 @@ public enum ExceptionFormats
     /// Whether or not to show the exception stack trace.
     /// </summary>
     NoStackTrace = 16,
+
+    /// <summary>
+    /// Whether or not to show inner exceptions.
+    /// </summary>
+    /// <remarks>
+    /// If this flag is set, inner exceptions will not be shown.
+    /// This flag has the same effect as setting <see cref="ExceptionSettings.ShowInnerExceptions"/> to <c>false</c>.
+    /// </remarks>
+    NoInnerExceptions = 32,
 }
