@@ -8,10 +8,8 @@ public sealed class SelectionFormField : FormField<string>
 
     public IReadOnlyList<SelectionChoice> Choices => _choices;
 
-    public int PageSize { get; set; } = 10;
     public bool WrapAround { get; set; }
     public int? DefaultIndex { get; set; }
-    public string? MoreChoicesText { get; set; }
 
     public SelectionFormField(string id, string label)
         : base(id, label)

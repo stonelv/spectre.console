@@ -12,8 +12,6 @@ public abstract class FormField<T> : IFormField
     public string? ValidationErrorMessage { get; set; } = "[red]Invalid input[/]";
     public Func<T?, ValidationResult>? Validator { get; set; }
     public Style? LabelStyle { get; set; }
-    public Style? InvalidStyle { get; set; }
-    public Style? HighlightStyle { get; set; }
 
     public T? Value
     {

@@ -140,6 +140,159 @@ public sealed class FormPromptTests
     }
 
     [Fact]
+    public void TextFormField_Required_With_AllowEmpty_Should_Accept_Empty_String()
+    {
+        // Given
+        var field = new TextFormField("notes", "Notes")
+            .IsRequired()
+            .AllowEmpty();
+
+        field.Value = "";
+
+        // When
+        var result = field.Validate();
+
+        // Then
+        result.Successful.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void TextFormField_Required_Without_AllowEmpty_Should_Reject_Empty_String()
+    {
+        // Given
+        var field = new TextFormField("name", "Name")
+            .IsRequired();
+
+        field.Value = "";
+
+        // When
+        var result = field.Validate();
+
+        // Then
+        result.Successful.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void TextFormField_Required_Without_AllowEmpty_Should_Reject_Whitespace()
+    {
+        // Given
+        var field = new TextFormField("name", "Name")
+            .IsRequired();
+
+        field.Value = "   ";
+
+        // When
+        var result = field.Validate();
+
+        // Then
+        result.Successful.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void TextFormField_MaxLength_Should_Reject_Long_Input()
+    {
+        // Given
+        var field = new TextFormField("code", "Code")
+            .MaxLength(5);
+
+        field.Value = "123456";
+
+        // When
+        var result = field.Validate();
+
+        // Then
+        result.Successful.ShouldBeFalse();
+        result.Message.ShouldContain("5");
+    }
+
+    [Fact]
+    public void TextFormField_MaxLength_Should_Accept_Short_Input()
+    {
+        // Given
+        var field = new TextFormField("code", "Code")
+            .MaxLength(5);
+
+        field.Value = "12345";
+
+        // When
+        var result = field.Validate();
+
+        // Then
+        result.Successful.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void PasswordFormField_MinLength_Should_Reject_Short_Password()
+    {
+        // Given
+        var field = new PasswordFormField("password", "Password")
+            .MinLength(8);
+
+        field.Value = "1234567";
+
+        // When
+        var result = field.Validate();
+
+        // Then
+        result.Successful.ShouldBeFalse();
+        result.Message.ShouldContain("8");
+    }
+
+    [Fact]
+    public void PasswordFormField_MinLength_Should_Accept_Long_Password()
+    {
+        // Given
+        var field = new PasswordFormField("password", "Password")
+            .MinLength(8);
+
+        field.Value = "12345678";
+
+        // When
+        var result = field.Validate();
+
+        // Then
+        result.Successful.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void PasswordFormField_MaxLength_Should_Reject_Long_Password()
+    {
+        // Given
+        var field = new PasswordFormField("password", "Password")
+            .MaxLength(10);
+
+        field.Value = "12345678901";
+
+        // When
+        var result = field.Validate();
+
+        // Then
+        result.Successful.ShouldBeFalse();
+        result.Message.ShouldContain("10");
+    }
+
+    [Fact]
+    public void FormPrompt_Should_Have_Default_SubmitText()
+    {
+        // Given
+        var form = new FormPrompt();
+
+        // Then
+        form.SubmitText.ShouldBe("[green]Submit[/]");
+    }
+
+    [Fact]
+    public void FormPrompt_Should_Set_SubmitText()
+    {
+        // Given
+        var form = new FormPrompt()
+            .SubmitText("Confirm");
+
+        // Then
+        form.SubmitText.ShouldBe("Confirm");
+    }
+
+    [Fact]
     public void FormResult_Should_Get_Value_Generic()
     {
         // Given

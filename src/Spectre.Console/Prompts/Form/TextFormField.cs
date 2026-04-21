@@ -13,4 +13,36 @@ public sealed class TextFormField : FormField<string>
         : base(id, label)
     {
     }
+
+    public override ValidationResult Validate()
+    {
+        if (IsRequired)
+        {
+            if (Value == null)
+            {
+                return ValidationResult.Error(ValidationErrorMessage);
+            }
+
+            if (!AllowEmpty && string.IsNullOrWhiteSpace(Value))
+            {
+                return ValidationResult.Error(ValidationErrorMessage);
+            }
+        }
+
+        if (MaxLength.HasValue && Value != null && Value.Length > MaxLength)
+        {
+            return ValidationResult.Error($"Input must not exceed {MaxLength} characters");
+        }
+
+        if (Validator != null)
+        {
+            var result = Validator(Value);
+            if (!result.Successful)
+            {
+                return ValidationResult.Error(result.Message ?? ValidationErrorMessage);
+            }
+        }
+
+        return ValidationResult.Success();
+    }
 }
