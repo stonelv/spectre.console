@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Spectre.Console.Cli;
 
 /// <summary>
@@ -46,7 +48,7 @@ public static class ArgumentTraceExample
         context.AddOption(
             name: "--framework",
             aliases: new[] { "--framework", "-f" },
-            value: null,
+            value: "net8.0",
             source: ArgumentSource.DefaultValue,
             description: "The target framework",
             isRequired: false,
@@ -218,4 +220,274 @@ public static class ArgumentTraceExample
 
         console.Write(table);
     }
+
+    /// <summary>
+    /// Demonstrates how to configure argument tracing with the CommandApp.
+    /// </summary>
+    /// <remarks>
+    /// This example shows the code you would write in your Program.cs to enable argument tracing.
+    /// Note: This requires the actual Spectre.Console.Cli NuGet package to compile and run.
+    /// </remarks>
+    public static void RunIntegrationExample()
+    {
+        System.Console.WriteLine(@"
+=== Integration Example (Program.cs) ===
+
+// In your Program.cs, you would write:
+
+using Spectre.Console.Cli;
+
+namespace MyApp;
+
+public static class Program
+{
+    public static int Main(string[] args)
+    {
+        var app = new CommandApp();
+        
+        app.Configure(config =>
+        {
+            // Enable argument tracing
+            config.UseArgumentTracing(options =>
+            {
+                // Enable environment variable support with prefix
+                options.EnableEnvironmentVariables = true;
+                options.EnvironmentVariablePrefix = ""MYAPP_"";
+                
+                // Map specific arguments to environment variables
+                options.MapEnvironmentVariable(""configuration"", ""MYAPP_CONFIG"");
+                options.MapEnvironmentVariable(""verbose"", ""MYAPP_VERBOSE"");
+                
+                // Enable JSON config file support
+                options.EnableJsonConfig = true;
+                options.JsonConfigPath = ""appsettings.json"";
+                
+                // Map specific arguments to config paths
+                options.MapJsonConfig(""output"", ""build.outputPath"");
+                options.MapJsonConfig(""logLevel"", ""logging.logLevel"");
+                
+                // Show trace on error (default: true)
+                options.ShowTraceOnError = true;
+                
+                // Always show trace (useful for debugging)
+                // options.AlwaysShowTrace = true;
+                
+                // Show detailed information
+                options.ShowDetails = true;
+                options.ShowSummary = true;
+                
+                // Add custom value providers
+                // options.AddValueProvider(new MyCustomValueProvider());
+            });
+            
+            // Register your commands
+            config.AddCommand<BuildCommand>(""build"");
+            config.AddCommand<DeployCommand>(""deploy"");
+        });
+        
+        return app.Run(args);
+    }
 }
+
+=== Command Settings Example ===
+
+public class BuildSettings : CommandSettings
+{
+    [CommandOption(""--configuration|-c <CONFIGURATION>"")]
+    [Description(""The configuration to build (Debug/Release)"")]
+    [DefaultValue(""Debug"")]
+    public string? Configuration { get; set; }
+    
+    [CommandOption(""--verbose|-v"")]
+    [Description(""Enable verbose output"")]
+    public bool Verbose { get; set; }
+    
+    [CommandOption(""--output|-o <OUTPUT>"")]
+    [Description(""The output directory"")]
+    public string? Output { get; set; }
+    
+    [CommandArgument(0, ""[PROJECT]"")]
+    [Description(""The project file to build"")]
+    public string? Project { get; set; }
+}
+
+=== Usage Examples ===
+
+1. Show argument trace with --debug-args flag:
+   myapp build --configuration Release --debug-args ./src/MyApp.csproj
+
+2. Show argument trace on parsing error:
+   myapp deploy --dry-run
+   (Missing required argument 'environment' → shows trace)
+
+3. Environment variable fallback:
+   export MYAPP_CONFIG=Release
+   export MYAPP_VERBOSE=true
+   myapp build ./src/MyApp.csproj
+   (Configuration and Verbose will show as coming from environment variables)
+
+4. JSON config file (appsettings.json):
+   {
+     ""build"": {
+       ""outputPath"": ""./dist""
+     },
+     ""logging"": {
+       ""logLevel"": ""Information""
+     }
+   }
+");
+    }
+
+    /// <summary>
+    /// Demonstrates how to implement a custom value provider.
+    /// </summary>
+    public static void RunCustomValueProviderExample()
+    {
+        System.Console.WriteLine(@"
+=== Custom Value Provider Example ===
+
+// Implement IArgumentValueProvider to support custom value sources
+
+public class IniConfigValueProvider : IArgumentValueProvider
+{
+    private readonly string _filePath;
+    private readonly Dictionary<string, string> _mappings;
+    private Dictionary<string, string>? _configCache;
+
+    public string Name => ""IniConfig"";
+    public int Priority { get; set; } = 150;
+    public ArgumentSource Source => ArgumentSource.ConfigurationFile;
+
+    public IniConfigValueProvider(string filePath)
+    {
+        _filePath = filePath;
+        _mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public IniConfigValueProvider Map(string argumentName, string iniPath)
+    {
+        _mappings[argumentName] = iniPath;
+        return this;
+    }
+
+    public bool TryGetValue(string argumentName, IEnumerable<string>? aliases, out object? value)
+    {
+        value = null;
+        EnsureLoaded();
+        
+        if (_mappings.TryGetValue(argumentName, out var iniPath))
+        {
+            if (_configCache?.TryGetValue(iniPath, out var iniValue) == true)
+            {
+                value = iniValue;
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    public string? GetSourceDetails(string argumentName)
+    {
+        if (_mappings.TryGetValue(argumentName, out var iniPath))
+        {
+            return $""Config file: {_filePath} -> {iniPath}"";
+        }
+        return null;
+    }
+
+    private void EnsureLoaded()
+    {
+        if (_configCache != null) return;
+        
+        // Parse INI file and populate _configCache
+        // Example iniPath format: ""section.key""
+    }
+}
+
+// Usage in Program.cs:
+config.UseArgumentTracing(options =>
+{
+    options.AddValueProvider(new IniConfigValueProvider(""config.ini"")
+        .Map(""configuration"", ""build.config"")
+        .Map(""output"", ""build.output""));
+});
+");
+    }
+
+    /// <summary>
+    /// Demonstrates how to use the ArgumentTraceInterceptor directly.
+    /// </summary>
+    public static void RunInterceptorExample()
+    {
+        System.Console.WriteLine(@"
+=== Interceptor Direct Usage Example ===
+
+// You can also use the interceptor directly for more control
+
+public static int Main(string[] args)
+{
+    var app = new CommandApp();
+    
+    app.Configure(config =>
+    {
+        // Create and configure the interceptor manually
+        var interceptor = new ArgumentTraceInterceptor(
+            console: AnsiConsole.Console,
+            alwaysShowTrace: false,
+            showDetails: true,
+            showSummary: true);
+        
+        // Add value providers
+        interceptor.AddValueProvider(new EnvironmentVariableValueProvider(""MYAPP_""));
+        interceptor.AddValueProvider(new JsonConfigValueProvider(""appsettings.json""));
+        
+        // Set the interceptor
+        config.SetInterceptor(interceptor);
+        
+        // Also set up exception handling if needed
+        config.SetExceptionHandler((ex, resolver) =>
+        {
+            // You can access the interceptor's TraceContext here if needed
+            AnsiConsole.WriteException(ex);
+            return -1;
+        });
+        
+        // Register commands
+        config.AddCommand<BuildCommand>(""build"");
+    });
+    
+    return app.Run(args);
+}
+");
+    }
+}
+
+/// <summary>
+/// Example settings class for demonstration purposes.
+/// </summary>
+internal class ExampleBuildSettings : CommandSettings
+{
+    [CommandOption("--configuration|-c <CONFIGURATION>")]
+    [Description("The configuration to build (Debug/Release)")]
+    [DefaultValue("Debug")]
+    public string? Configuration { get; set; }
+
+    [CommandOption("--verbose|-v")]
+    [Description("Enable verbose output")]
+    public bool Verbose { get; set; }
+
+    [CommandOption("--output|-o <OUTPUT>")]
+    [Description("The output directory")]
+    [DefaultValue("./bin")]
+    public string? Output { get; set; }
+
+    [CommandOption("--framework|-f <FRAMEWORK>")]
+    [Description("The target framework")]
+    public string? Framework { get; set; }
+
+    [CommandArgument(0, "[PROJECT]")]
+    [Description("The project file to build")]
+    public string? Project { get; set; }
+}
+
