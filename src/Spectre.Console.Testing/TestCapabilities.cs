@@ -26,10 +26,16 @@ public sealed class TestCapabilities : IReadOnlyCapabilities
     /// <inheritdoc/>
     public bool Unicode { get; set; }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets or sets a value indicating whether
+    /// or not the console supports alternate buffers.
+    /// </summary>
     public bool AlternateBuffer { get; set; }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets or sets a value indicating whether
+    /// or not the console supports emoji.
+    /// </summary>
     public bool Emoji { get; set; }
 
     /// <summary>

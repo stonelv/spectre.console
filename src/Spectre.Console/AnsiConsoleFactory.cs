@@ -43,25 +43,37 @@ public sealed class AnsiConsoleFactory
             interactive = !System.Console.IsInputRedirected;
         }
 
-        // Detect Unicode support
+        // Detect Unicode support (improved detection)
         var supportsUnicode = settings.Unicode == UnicodeSupport.Yes;
-        if (settings.Unicode == UnicodeSupport.Detect)
+        if (settings.Unicode == UnicodeSupport.No)
         {
-            supportsUnicode = encoding.EncodingName.ContainsExact("Unicode");
+            supportsUnicode = false;
+        }
+        else if (settings.Unicode == UnicodeSupport.Detect)
+        {
+            supportsUnicode = UnicodeDetector.Detect(encoding, settings.EnvironmentVariables);
         }
 
         // Detect Emoji support
         var supportsEmoji = settings.Emoji == EmojiSupport.Yes;
-        if (settings.Emoji == EmojiSupport.Detect)
+        if (settings.Emoji == EmojiSupport.No)
+        {
+            supportsEmoji = false;
+        }
+        else if (settings.Emoji == EmojiSupport.Detect)
         {
             supportsEmoji = EmojiDetector.Detect(supportsUnicode, settings.EnvironmentVariables);
         }
 
-        // Detect Links support
+        // Detect Links support (improved detection)
         var supportsLinks = settings.Links == LinksSupport.Yes;
-        if (settings.Links == LinksSupport.Detect)
+        if (settings.Links == LinksSupport.No)
         {
-            supportsLinks = supportsAnsi && !legacyConsole;
+            supportsLinks = false;
+        }
+        else if (settings.Links == LinksSupport.Detect)
+        {
+            supportsLinks = LinksDetector.Detect(supportsAnsi, legacyConsole, settings.EnvironmentVariables);
         }
 
         var profile = new Profile(output, encoding);

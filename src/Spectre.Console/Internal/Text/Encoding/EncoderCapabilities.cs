@@ -10,8 +10,6 @@ internal sealed class EncoderCapabilities : IReadOnlyCapabilities
     public bool IsTerminal => false;
     public bool Interactive => false;
     public bool Unicode => true;
-    public bool AlternateBuffer => false;
-    public bool Emoji => false;
 
     public EncoderCapabilities(ColorSystem colors)
     {

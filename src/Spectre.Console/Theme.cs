@@ -115,7 +115,7 @@ public sealed class Theme
 
         return Create(
             capabilities.Unicode,
-            capabilities.Emoji,
+            capabilities.SupportsEmoji(),
             capabilities.ColorSystem);
     }
 
