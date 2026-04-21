@@ -26,6 +26,12 @@ public sealed class TestCapabilities : IReadOnlyCapabilities
     /// <inheritdoc/>
     public bool Unicode { get; set; }
 
+    /// <inheritdoc/>
+    public bool AlternateBuffer { get; set; }
+
+    /// <inheritdoc/>
+    public bool Emoji { get; set; }
+
     /// <summary>
     /// Creates a <see cref="RenderOptions"/> with the same capabilities as this instace.
     /// </summary>

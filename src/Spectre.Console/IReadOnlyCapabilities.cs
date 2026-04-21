@@ -18,7 +18,7 @@ public interface IReadOnlyCapabilities
 
     /// <summary>
     /// Gets a value indicating whether or not
-    /// the console support links.
+    /// the console supports links.
     /// </summary>
     bool Links { get; }
 
@@ -50,4 +50,16 @@ public interface IReadOnlyCapabilities
     /// or not the console supports Unicode.
     /// </summary>
     bool Unicode { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether
+    /// or not the console supports alternate buffers.
+    /// </summary>
+    bool AlternateBuffer { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether
+    /// or not the console supports emoji.
+    /// </summary>
+    bool Emoji { get; }
 }

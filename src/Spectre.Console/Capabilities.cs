@@ -60,6 +60,12 @@ public sealed class Capabilities : IReadOnlyCapabilities
     public bool AlternateBuffer { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether
+    /// or not the console supports emoji.
+    /// </summary>
+    public bool Emoji { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the
     /// <see cref="Capabilities"/> class.
     /// </summary>
