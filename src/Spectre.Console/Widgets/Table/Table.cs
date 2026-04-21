@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Reflection;
 using System.Text;
 using Spectre.Console.Rendering;
 
@@ -79,12 +77,7 @@ public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
     [Obsolete("Use the Align widget instead. This property will be removed in a later release.")]
     public Justify? Alignment { get; set; }
 
-    // Whether this is a grid or not.
     internal bool IsGrid { get; set; }
-
-    // Whether or not the most right cell should be padded.
-    // This is almost always the case, unless we're rendering
-    // a grid without explicit padding in the last cell.
     internal bool PadRightCell { get; set; } = true;
 
     /// <summary>
@@ -126,11 +119,7 @@ public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
         }
 
         var measurer = new TableMeasurer(this, options);
-
-        // Calculate the total cell width
         var totalCellWidth = measurer.CalculateTotalCellWidth(maxWidth);
-
-        // Calculate the minimum and maximum table width
         var measurements = _columns.Select(column => measurer.MeasureColumn(column, totalCellWidth));
         var minTableWidth = measurements.Sum(x => x.Min) + measurer.GetNonColumnWidth();
         var maxTableWidth = Width ?? measurements.Sum(x => x.Max) + measurer.GetNonColumnWidth();
@@ -146,16 +135,11 @@ public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
         }
 
         var measurer = new TableMeasurer(this, options);
-
-        // Calculate the column and table width
         var totalCellWidth = measurer.CalculateTotalCellWidth(maxWidth);
         var columnWidths = measurer.CalculateColumnWidths(totalCellWidth);
         var tableWidth = columnWidths.Sum() + measurer.GetNonColumnWidth();
-
-        // Get the rows to render
         var rows = GetRenderableRows();
 
-        // Render the table
         return TableRenderer.Render(
             new TableRendererContext(this, options, rows, tableWidth, maxWidth),
             columnWidths);
@@ -207,7 +191,7 @@ public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
     {
         for (int i = 0; i < _columns.Count; i++)
         {
-            var columnText = GetRenderableText(_columns[i].Header);
+            var columnText = TableSortHelper.GetPlainText(_columns[i].Header);
             if (columnText.Equals(columnName, StringComparison.Ordinal))
             {
                 return i;
@@ -215,92 +199,6 @@ public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
         }
 
         return -1;
-    }
-
-    private static string GetRenderableText(IRenderable? renderable)
-    {
-        if (renderable == null)
-        {
-            return string.Empty;
-        }
-
-        if (renderable is Text text)
-        {
-            return GetTextFromTextWidget(text);
-        }
-
-        if (renderable is Markup markup)
-        {
-            return GetTextFromMarkupWidget(markup);
-        }
-
-        return renderable.ToString() ?? string.Empty;
-    }
-
-    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075:UnrecognizedReflectionPattern",
-        Justification = "Text and Markup types are well-known and preserved in the library.")]
-    private static string GetTextFromTextWidget(Text text)
-    {
-        var paragraphField = typeof(Text).GetField("_paragraph", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (paragraphField == null)
-        {
-            return text.ToString() ?? string.Empty;
-        }
-
-        var paragraph = paragraphField.GetValue(text);
-        return ExtractTextFromParagraph(paragraph);
-    }
-
-    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075:UnrecognizedReflectionPattern",
-        Justification = "Text and Markup types are well-known and preserved in the library.")]
-    private static string GetTextFromMarkupWidget(Markup markup)
-    {
-        var paragraphField = typeof(Markup).GetField("_paragraph", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (paragraphField == null)
-        {
-            return markup.ToString() ?? string.Empty;
-        }
-
-        var paragraph = paragraphField.GetValue(markup);
-        return ExtractTextFromParagraph(paragraph);
-    }
-
-    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075:UnrecognizedReflectionPattern",
-        Justification = "Paragraph and Segment types are well-known and preserved in the library.")]
-    private static string ExtractTextFromParagraph(object? paragraph)
-    {
-        if (paragraph == null)
-        {
-            return string.Empty;
-        }
-
-        var linesField = typeof(Paragraph).GetField("_lines", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (linesField == null)
-        {
-            return paragraph.ToString() ?? string.Empty;
-        }
-
-        var lines = linesField.GetValue(paragraph) as List<SegmentLine>;
-        if (lines == null)
-        {
-            return string.Empty;
-        }
-
-        var textBuilder = new StringBuilder();
-        foreach (var line in lines)
-        {
-            if (line == null) continue;
-
-            foreach (var segment in line)
-            {
-                if (segment != null && segment.Text != null)
-                {
-                    textBuilder.Append(segment.Text);
-                }
-            }
-        }
-
-        return textBuilder.ToString();
     }
 
     private List<TableRow> GetRenderableRows()
@@ -323,9 +221,13 @@ public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
             var columnIndex = _sortColumnIndex.Value;
             if (columnIndex < _columns.Count)
             {
-                dataRows = _sortDescending
-                    ? dataRows.OrderByDescending(row => GetSortKey(row, columnIndex)).ToList()
-                    : dataRows.OrderBy(row => GetSortKey(row, columnIndex)).ToList();
+                var sorted = _sortDescending
+                    ? dataRows.Select(row => (Row: row, Key: TableSortHelper.CreateSortKey(row, columnIndex)))
+                        .OrderByDescending(x => x.Key, TableSortKeyComparer.Default)
+                    : dataRows.Select(row => (Row: row, Key: TableSortHelper.CreateSortKey(row, columnIndex)))
+                        .OrderBy(x => x.Key, TableSortKeyComparer.Default);
+
+                dataRows = sorted.Select(x => x.Row).ToList();
             }
         }
 
@@ -338,47 +240,193 @@ public sealed class Table : Renderable, IHasTableBorder, IExpandable, IAlignable
 
         return rows;
     }
+}
 
-    private static object GetSortKey(TableRow row, int columnIndex)
+internal enum TableSortKeyType
+{
+    Empty = 0,
+    Numeric = 1,
+    DateTime = 2,
+    String = 3,
+}
+
+internal readonly struct TableSortKey : IEquatable<TableSortKey>
+{
+    public TableSortKeyType Type { get; }
+    public string RawText { get; }
+    public decimal? NumericValue { get; }
+    public DateTimeOffset? DateTimeValue { get; }
+
+    private TableSortKey(TableSortKeyType type, string rawText, decimal? numericValue = null, DateTimeOffset? dateTimeValue = null)
+    {
+        Type = type;
+        RawText = rawText;
+        NumericValue = numericValue;
+        DateTimeValue = dateTimeValue;
+    }
+
+    public static TableSortKey Empty => new(TableSortKeyType.Empty, string.Empty);
+
+    public static TableSortKey ForString(string text)
+    {
+        return new TableSortKey(TableSortKeyType.String, text);
+    }
+
+    public static TableSortKey ForNumeric(decimal value, string rawText)
+    {
+        return new TableSortKey(TableSortKeyType.Numeric, rawText, numericValue: value);
+    }
+
+    public static TableSortKey ForDateTime(DateTimeOffset value, string rawText)
+    {
+        return new TableSortKey(TableSortKeyType.DateTime, rawText, dateTimeValue: value);
+    }
+
+    public bool Equals(TableSortKey other)
+    {
+        if (Type != other.Type)
+            return false;
+
+        return Type switch
+        {
+            TableSortKeyType.Empty => true,
+            TableSortKeyType.Numeric => NumericValue == other.NumericValue,
+            TableSortKeyType.DateTime => DateTimeValue == other.DateTimeValue,
+            TableSortKeyType.String => RawText == other.RawText,
+            _ => false,
+        };
+    }
+
+    public override bool Equals(object? obj)
+    {
+        return obj is TableSortKey other && Equals(other);
+    }
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            return Type switch
+            {
+                TableSortKeyType.Empty => 0,
+                TableSortKeyType.Numeric => ((int)Type * 397) ^ (NumericValue?.GetHashCode() ?? 0),
+                TableSortKeyType.DateTime => ((int)Type * 397) ^ (DateTimeValue?.GetHashCode() ?? 0),
+                TableSortKeyType.String => ((int)Type * 397) ^ (RawText?.GetHashCode() ?? 0),
+                _ => 0,
+            };
+        }
+    }
+
+    public static bool operator ==(TableSortKey left, TableSortKey right)
+    {
+        return left.Equals(right);
+    }
+
+    public static bool operator !=(TableSortKey left, TableSortKey right)
+    {
+        return !(left == right);
+    }
+}
+
+internal sealed class TableSortKeyComparer : IComparer<TableSortKey>
+{
+    public static TableSortKeyComparer Default { get; } = new();
+
+    public int Compare(TableSortKey x, TableSortKey y)
+    {
+        if (x.Type != y.Type)
+        {
+            return x.Type.CompareTo(y.Type);
+        }
+
+        return x.Type switch
+        {
+            TableSortKeyType.Empty => 0,
+            TableSortKeyType.Numeric => (x.NumericValue ?? 0).CompareTo(y.NumericValue ?? 0),
+            TableSortKeyType.DateTime => (x.DateTimeValue ?? default).CompareTo(y.DateTimeValue ?? default),
+            TableSortKeyType.String => StringComparer.Ordinal.Compare(x.RawText, y.RawText),
+            _ => 0,
+        };
+    }
+}
+
+internal static class TableSortHelper
+{
+    private static readonly RenderOptions SortRenderOptions = new(
+        SortCapabilities.Default,
+        new Size(int.MaxValue, int.MaxValue))
+    {
+        SingleLine = true
+    };
+
+    public static string GetPlainText(IRenderable? renderable)
+    {
+        if (renderable == null)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var segments = renderable.Render(SortRenderOptions, int.MaxValue);
+            var textBuilder = new StringBuilder();
+
+            foreach (var segment in segments)
+            {
+                if (segment != null && !segment.IsControlCode)
+                {
+                    textBuilder.Append(segment.Text);
+                }
+            }
+
+            return textBuilder.ToString();
+        }
+        catch
+        {
+            return renderable.ToString() ?? string.Empty;
+        }
+    }
+
+    public static TableSortKey CreateSortKey(TableRow row, int columnIndex)
     {
         if (columnIndex >= row.Count)
         {
-            return string.Empty;
+            return TableSortKey.Empty;
         }
 
         var cell = row[columnIndex];
-        var text = GetRenderableText(cell);
+        var text = GetPlainText(cell);
 
-        if (string.IsNullOrEmpty(text))
+        if (string.IsNullOrWhiteSpace(text))
         {
-            return string.Empty;
+            return TableSortKey.Empty;
         }
 
-        if (int.TryParse(text, out var intValue))
+        var trimmedText = text.Trim();
+
+        if (decimal.TryParse(trimmedText, out var decimalValue))
         {
-            return intValue;
+            return TableSortKey.ForNumeric(decimalValue, trimmedText);
         }
 
-        if (long.TryParse(text, out var longValue))
+        if (DateTimeOffset.TryParse(trimmedText, out var dateTimeValue))
         {
-            return longValue;
+            return TableSortKey.ForDateTime(dateTimeValue, trimmedText);
         }
 
-        if (decimal.TryParse(text, out var decimalValue))
-        {
-            return decimalValue;
-        }
-
-        if (DateTime.TryParse(text, out var dateValue))
-        {
-            return dateValue;
-        }
-
-        if (DateTimeOffset.TryParse(text, out var dateOffsetValue))
-        {
-            return dateOffsetValue;
-        }
-
-        return text;
+        return TableSortKey.ForString(trimmedText);
     }
+}
+
+internal sealed class SortCapabilities : IReadOnlyCapabilities
+{
+    public static SortCapabilities Default { get; } = new();
+
+    public ColorSystem ColorSystem => ColorSystem.NoColors;
+    public bool Ansi => false;
+    public bool Links => false;
+    public bool Legacy => false;
+    public bool IsTerminal => false;
+    public bool Interactive => false;
+    public bool Unicode => true;
 }

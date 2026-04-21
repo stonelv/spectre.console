@@ -1089,5 +1089,193 @@ public sealed class TableTests
             // Then
             return Verifier.Verify(console.Output);
         }
+
+        [Fact]
+        [Expectation("Sort_Mixed_Types")]
+        public Task Should_Sort_Table_With_Mixed_Types_Stably()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Value");
+            table.AddRow("");
+            table.AddRow("123");
+            table.AddRow("abc");
+            table.AddRow("2024-01-01");
+            table.AddRow("  ");
+            table.AddRow("xyz");
+            table.SortBy(0);
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_With_Empty_Values")]
+        public Task Should_Sort_Table_With_Empty_Values_First()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Score");
+            table.AddRow("Alice", "");
+            table.AddRow("Bob", "100");
+            table.AddRow("Charlie", "");
+            table.AddRow("David", "50");
+            table.SortBy("Score");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_Numeric_Vs_String")]
+        public Task Should_Sort_Numeric_Before_String()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Item", "Value");
+            table.AddRow("A", "100");
+            table.AddRow("B", "abc");
+            table.AddRow("C", "50");
+            table.AddRow("D", "xyz");
+            table.SortBy("Value");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_DateTime_vs_String")]
+        public Task Should_Sort_DateTime_Before_String_After_Numeric()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("ID", "Timestamp");
+            table.AddRow("1", "zebra");
+            table.AddRow("2", "2024-06-15");
+            table.AddRow("3", "100");
+            table.AddRow("4", "apple");
+            table.SortBy("Timestamp");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_Large_Numbers")]
+        public Task Should_Sort_Large_Numbers_Correctly()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Population");
+            table.AddRow("Country A", "1000000");
+            table.AddRow("Country B", "999999");
+            table.AddRow("Country C", "10000000");
+            table.SortBy("Population");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_With_Markup_Text")]
+        public Task Should_Sort_By_Plain_Text_Ignoring_Markup()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Name", "Status");
+            table.AddRow("[red]Zebra[/]", "[green]Done[/]");
+            table.AddRow("[blue]Apple[/]", "[yellow]Pending[/]");
+            table.AddRow("[cyan]Mango[/]", "[red]Error[/]");
+            table.SortBy("Name");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_With_Whitespace")]
+        public Task Should_Treat_Whitespace_As_Empty()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Code", "Description");
+            table.AddRow("A", "Alpha");
+            table.AddRow("B", "   ");
+            table.AddRow("C", "Charlie");
+            table.AddRow("D", "");
+            table.SortBy("Description");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_With_Negative_Numbers")]
+        public Task Should_Sort_Negative_Numbers_Correctly()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Item", "Value");
+            table.AddRow("A", "-10");
+            table.AddRow("B", "5");
+            table.AddRow("C", "-5");
+            table.AddRow("D", "0");
+            table.SortBy("Value");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
+
+        [Fact]
+        [Expectation("Sort_With_DateTimeOffset")]
+        public Task Should_Sort_DateTime_With_Offset()
+        {
+            // Given
+            var console = new TestConsole();
+            var table = new Table();
+            table.AddColumns("Event", "DateTime");
+            table.AddRow("Event 1", "2024-01-15T10:00:00+00:00");
+            table.AddRow("Event 2", "2024-01-15T08:00:00-05:00");
+            table.AddRow("Event 3", "2024-01-15T14:00:00+04:00");
+            table.SortBy("DateTime");
+
+            // When
+            console.Write(table);
+
+            // Then
+            return Verifier.Verify(console.Output);
+        }
     }
 }
