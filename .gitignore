@@ -15,7 +15,7 @@
 /.dotnet/
 /.packages/
 dotnet-install.sh*
-*.lock.json
+!packages.lock.json
 
 # Visual Studio
 .vs/

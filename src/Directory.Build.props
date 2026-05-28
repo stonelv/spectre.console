@@ -1,5 +1,6 @@
 ﻿<Project>
   <PropertyGroup Label="Settings">
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <Deterministic>true</Deterministic>
     <LangVersion>14</LangVersion>
     <DebugSymbols>true</DebugSymbols>
